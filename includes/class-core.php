@@ -212,12 +212,13 @@ class PE_Core {
     }
 
     public function enqueue_frontend_assets(): void {
-        if (!is_account_page()) {
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
             return;
         }
 
-        $user_id = get_current_user_id();
-        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+        $on_b2b_page = is_account_page() || is_cart() || is_checkout();
+        if (!$on_b2b_page) {
             return;
         }
 
@@ -236,15 +237,36 @@ class PE_Core {
             true
         );
 
+        // Checkout blocking data for JS (WoodMart compatibility).
+        $checkout_blocked       = false;
+        $checkout_block_reason  = '';
+        $approval_button_html   = '';
+
+        if ((is_cart() || is_checkout()) && class_exists('PE_Budget_Manager')) {
+            $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
+            if (true !== $reason) {
+                $checkout_blocked      = true;
+                $checkout_block_reason = $reason;
+                if (class_exists('PE_Approval_Manager')) {
+                    $approval_button_html = PE_Approval_Manager::get_instance()->get_approval_button_html('cart');
+                }
+            }
+        }
+
         wp_localize_script('pe-b2b-portal', 'peB2B', [
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce'   => wp_create_nonce('pe_b2b_ajax'),
-            'i18n'    => [
-                'confirmApprove'  => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),
-                'confirmReject'   => __('Confirmer le rejet de cette demande ?', 'portail-entreprises'),
-                'confirmDelete'   => __('Êtes-vous sûr de vouloir effectuer cette action ?', 'portail-entreprises'),
-                'processing'      => __('Traitement en cours...', 'portail-entreprises'),
-                'error'           => __('Une erreur est survenue. Veuillez réessayer.', 'portail-entreprises'),
+            'ajaxUrl'            => admin_url('admin-ajax.php'),
+            'nonce'              => wp_create_nonce('pe_b2b_ajax'),
+            'checkoutBlocked'    => $checkout_blocked,
+            'checkoutBlockMsg'   => $checkout_block_reason,
+            'approvalButtonHtml' => $approval_button_html,
+            'i18n'               => [
+                'confirmApprove'           => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),
+                'confirmReject'            => __('Confirmer le rejet de cette demande ?', 'portail-entreprises'),
+                'confirmDelete'            => __('Êtes-vous sûr de vouloir effectuer cette action ?', 'portail-entreprises'),
+                'confirmDeleteCompany'     => __('Êtes-vous sûr de vouloir supprimer la société « %s » ?', 'portail-entreprises'),
+                'confirmDeleteCompanyFinal' => __('ATTENTION : cette action est irréversible. Toutes les données associées (utilisateurs, budgets, agences, approbations) seront supprimées. Confirmer définitivement ?', 'portail-entreprises'),
+                'processing'               => __('Traitement en cours...', 'portail-entreprises'),
+                'error'                    => __('Une erreur est survenue. Veuillez réessayer.', 'portail-entreprises'),
             ],
         ]);
     }

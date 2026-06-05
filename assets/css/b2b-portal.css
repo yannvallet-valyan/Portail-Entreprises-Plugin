@@ -794,6 +794,20 @@
     font-weight: 600 !important;
 }
 
+/* Approbation dans mini-panier */
+.woocommerce-mini-cart__buttons .pe-approval-request-form,
+.widget_shopping_cart_content .pe-approval-request-form {
+    display: block;
+    padding: 8px 16px;
+}
+
+.woocommerce-mini-cart__buttons .pe-request-approval-btn,
+.widget_shopping_cart_content .pe-request-approval-btn {
+    width: 100%;
+    display: block;
+    text-align: center;
+}
+
 .pe-request-approval-btn:hover {
     background: var(--pe-blue-hover) !important;
 }
