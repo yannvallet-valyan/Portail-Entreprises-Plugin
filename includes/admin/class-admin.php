@@ -20,6 +20,7 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_remove_user_from_company', [$this, 'ajax_admin_remove_user_from_company']);
         add_action('wp_ajax_pe_admin_create_cost_center', [$this, 'ajax_admin_create_cost_center']);
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
+        add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
         add_action('admin_post_pe_update_company', [$this, 'handle_post_update_company']);
@@ -88,9 +89,11 @@ class PE_Admin {
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce'   => wp_create_nonce('pe_b2b_ajax'),
             'i18n'    => [
-                'confirmDelete' => __('Êtes-vous sûr de vouloir effectuer cette action ?', 'portail-entreprises'),
-                'processing'    => __('Traitement en cours...', 'portail-entreprises'),
-                'error'         => __('Une erreur est survenue.', 'portail-entreprises'),
+                'confirmDelete'             => __('Êtes-vous sûr de vouloir effectuer cette action ?', 'portail-entreprises'),
+                'confirmDeleteCompany'      => __('Êtes-vous sûr de vouloir supprimer la société « %s » ?', 'portail-entreprises'),
+                'confirmDeleteCompanyFinal' => __('ATTENTION : cette action est irréversible. Toutes les données associées (utilisateurs, budgets, agences, approbations) seront supprimées. Confirmer définitivement ?', 'portail-entreprises'),
+                'processing'                => __('Traitement en cours...', 'portail-entreprises'),
+                'error'                     => __('Une erreur est survenue.', 'portail-entreprises'),
             ],
         ]);
     }
@@ -393,6 +396,31 @@ class PE_Admin {
 
         wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=edit&company_id=' . $company_id));
         exit;
+    }
+
+    public function ajax_admin_delete_company(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+
+        if (!$company_id) {
+            wp_send_json_error(['message' => __('Société invalide.', 'portail-entreprises')]);
+        }
+
+        $result = PE_Company_Manager::get_instance()->delete_company($company_id);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        wp_send_json_success([
+            'message'  => __('Société supprimée avec succès.', 'portail-entreprises'),
+            'redirect' => admin_url('admin.php?page=portail-b2b'),
+        ]);
     }
 
     public function ajax_admin_delete_approval_rule(): void {

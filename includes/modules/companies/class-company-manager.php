@@ -504,6 +504,58 @@ class PE_Company_Manager {
     }
 
     /**
+     * Supprime une entreprise et toutes ses données associées.
+     *
+     * @param int $company_id ID de l'entreprise.
+     * @return bool|WP_Error
+     */
+    public function delete_company(int $company_id): bool|\WP_Error {
+        global $wpdb;
+
+        $company = $this->get_company($company_id);
+        if (!$company) {
+            return new \WP_Error('not_found', __('Société introuvable.', 'portail-entreprises'));
+        }
+
+        $prefix = $wpdb->prefix . 'b2b_';
+
+        // Détacher les utilisateurs (retirer le flag B2B des utilisateurs rattachés).
+        $user_ids = $wpdb->get_col(
+            $wpdb->prepare("SELECT user_id FROM {$prefix}user_company WHERE company_id = %d", $company_id)
+        );
+        foreach ($user_ids as $uid) {
+            PE_Permissions::flush_user_cache((int) $uid);
+        }
+
+        // Supprimer toutes les données liées à l'entreprise.
+        $wpdb->delete($prefix . 'user_company',       ['company_id' => $company_id], ['%d']);
+        $wpdb->delete($prefix . 'agencies',           ['company_id' => $company_id], ['%d']);
+        $wpdb->delete($prefix . 'cost_centers',       ['company_id' => $company_id], ['%d']);
+        $wpdb->delete($prefix . 'budget_usage',       ['company_id' => $company_id], ['%d']);
+        $wpdb->delete($prefix . 'approval_rules',     ['company_id' => $company_id], ['%d']);
+        $wpdb->delete($prefix . 'approval_requests',  ['company_id' => $company_id], ['%d']);
+
+        $result = $wpdb->delete($prefix . 'companies', ['id' => $company_id], ['%d']);
+
+        if (false === $result || 0 === $result) {
+            return new \WP_Error('db_error', __('Erreur lors de la suppression de la société.', 'portail-entreprises'));
+        }
+
+        wp_cache_delete('pe_company_' . $company_id, 'portail-entreprises');
+
+        PE_Audit_Log::get_instance()->log(
+            get_current_user_id(),
+            $company_id,
+            'delete_company',
+            'company',
+            $company_id,
+            ['name' => $company->name]
+        );
+
+        return true;
+    }
+
+    /**
      * Supprime une règle d'approbation.
      */
     public function delete_approval_rule(int $rule_id, int $company_id): bool {

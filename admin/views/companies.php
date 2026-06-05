@@ -86,6 +86,13 @@ settings_errors('pe_messages');
                        class="button button-small">
                         <?php esc_html_e('Modifier', 'portail-entreprises'); ?>
                     </a>
+                    <button type="button" class="button button-small pe-delete-company"
+                            data-company-id="<?php echo esc_attr($company->id); ?>"
+                            data-company-name="<?php echo esc_attr($company->name); ?>"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>"
+                            style="color:#b32d2e;border-color:#b32d2e;">
+                        <?php esc_html_e('Supprimer', 'portail-entreprises'); ?>
+                    </button>
                 </td>
             </tr>
             <?php endforeach; ?>

@@ -264,6 +264,57 @@
                 });
             });
 
+            // Suppression d'une société — double confirmation
+            $(document).on('click', '.pe-delete-company', function () {
+                var $btn        = $(this);
+                var companyId   = $btn.data('company-id');
+                var companyName = $btn.data('company-name');
+                var nonce       = $btn.data('nonce');
+
+                // 1ère validation
+                var msg1 = (peB2B.i18n.confirmDeleteCompany || 'Êtes-vous sûr de vouloir supprimer la société « %s » ?')
+                    .replace('%s', companyName);
+                if (!window.confirm(msg1)) {
+                    return;
+                }
+
+                // 2ème validation (irréversible)
+                var msg2 = peB2B.i18n.confirmDeleteCompanyFinal ||
+                    'ATTENTION : cette action est irréversible. Toutes les données associées (utilisateurs, budgets, agences, approbations) seront supprimées. Confirmer définitivement ?';
+                if (!window.confirm(msg2)) {
+                    return;
+                }
+
+                self.setButtonLoading($btn);
+
+                $.ajax({
+                    url:    peB2B.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action:     'pe_admin_delete_company',
+                        nonce:      nonce,
+                        company_id: companyId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            if (response.data && response.data.redirect) {
+                                window.location.href = response.data.redirect;
+                            } else {
+                                var $row = $btn.closest('tr');
+                                $row.fadeOut(300, function () { $row.remove(); });
+                            }
+                        } else {
+                            self.showFeedback('error', (response.data && response.data.message) || peB2B.i18n.error);
+                            self.resetButton($btn);
+                        }
+                    },
+                    error: function () {
+                        self.showFeedback('error', peB2B.i18n.error);
+                        self.resetButton($btn);
+                    }
+                });
+            });
+
             // Suppression d'une règle d'approbation
             $(document).on('click', '.pe-delete-approval-rule', function () {
                 var $btn      = $(this);

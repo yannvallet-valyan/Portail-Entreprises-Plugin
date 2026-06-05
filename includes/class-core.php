@@ -27,6 +27,19 @@ class PE_Core {
         // Enregistrement des endpoints My Account
         add_action('init', [$this, 'register_endpoints']);
 
+        // Déclarer les endpoints auprès de WooCommerce (méthode canonique).
+        add_filter('woocommerce_get_query_vars', [$this, 'add_wc_query_vars']);
+
+        // Titres des endpoints
+        add_filter('woocommerce_endpoint_b2b-dashboard_title', fn() => __('Tableau de bord B2B', 'portail-entreprises'));
+        add_filter('woocommerce_endpoint_b2b-company_title', fn() => __('Mon entreprise', 'portail-entreprises'));
+        add_filter('woocommerce_endpoint_b2b-users_title', fn() => __('Utilisateurs', 'portail-entreprises'));
+        add_filter('woocommerce_endpoint_b2b-budgets_title', fn() => __('Budgets', 'portail-entreprises'));
+        add_filter('woocommerce_endpoint_b2b-approvals_title', fn() => __('Approbations', 'portail-entreprises'));
+
+        // Flush différé des rewrite rules si la version a changé.
+        add_action('init', [$this, 'maybe_flush_rewrite_rules'], 99);
+
         // Ajout des éléments de menu My Account pour les utilisateurs B2B
         add_filter('woocommerce_account_menu_items', [$this, 'add_b2b_menu_items']);
 
@@ -74,16 +87,46 @@ class PE_Core {
         });
     }
 
-    public function register_endpoints(): void {
-        add_rewrite_endpoint('b2b-dashboard', EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-company',   EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-users',     EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-budgets',   EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-approvals', EP_ROOT | EP_PAGES);
+    /**
+     * Liste des endpoints B2B (slug => query var).
+     */
+    public static function get_b2b_endpoints(): array {
+        return [
+            'b2b-dashboard',
+            'b2b-company',
+            'b2b-users',
+            'b2b-budgets',
+            'b2b-approvals',
+        ];
+    }
 
-        // Flush différé : si le flag d'activation est présent, flusher une seule fois.
-        if (get_option('pe_flush_rewrite_rules')) {
+    public function register_endpoints(): void {
+        foreach (self::get_b2b_endpoints() as $endpoint) {
+            add_rewrite_endpoint($endpoint, EP_ROOT | EP_PAGES);
+        }
+    }
+
+    /**
+     * Déclare les endpoints comme query vars WooCommerce (essentiel pour
+     * que WC les reconnaisse comme endpoints de la page "Mon compte").
+     */
+    public function add_wc_query_vars(array $vars): array {
+        foreach (self::get_b2b_endpoints() as $endpoint) {
+            $vars[$endpoint] = $endpoint;
+        }
+        return $vars;
+    }
+
+    /**
+     * Flush automatique des rewrite rules quand la version du plugin change
+     * ou lors de la première activation (sans intervention manuelle).
+     */
+    public function maybe_flush_rewrite_rules(): void {
+        $flushed_version = get_option('pe_rewrite_version');
+
+        if ($flushed_version !== PE_VERSION || get_option('pe_flush_rewrite_rules')) {
             flush_rewrite_rules();
+            update_option('pe_rewrite_version', PE_VERSION, false);
             delete_option('pe_flush_rewrite_rules');
         }
     }
