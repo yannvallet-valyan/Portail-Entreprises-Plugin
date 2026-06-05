@@ -311,7 +311,7 @@ class PE_Approval_Manager {
                 ['order_id' => $order_id, 'amount' => $amount]
             );
 
-            $this->notify_approvers($request_id, $company_id, $amount, $order_id);
+            $this->notify_approvers($request_id, $company_id, $amount, $order_id, $user_id);
         }
 
         return $request_id;
@@ -539,11 +539,32 @@ class PE_Approval_Manager {
     /**
      * Notifie les approbateurs B2B + l'admin WP/shop_manager d'une nouvelle demande.
      */
-    private function notify_approvers(int $request_id, int $company_id, float $amount, int $order_id): void {
+    private function notify_approvers(int $request_id, int $company_id, float $amount, int $order_id, int $requester_id = 0): void {
         global $wpdb;
 
         $approval_url = wc_get_account_endpoint_url('b2b-approvals');
-        $admin_order_url = admin_url('post.php?post=' . $order_id . '&action=edit');
+
+        // Informations sur le demandeur (nom, prénom, fonction/rôle).
+        $requester_label = '';
+        if ($requester_id > 0) {
+            $requester     = get_userdata($requester_id);
+            $requester_role = PE_Permissions::get_user_b2b_role($requester_id);
+            $roles_labels   = PE_Permissions::get_roles();
+            $role_label     = $roles_labels[$requester_role] ?? $requester_role;
+
+            if ($requester) {
+                $full_name = trim($requester->first_name . ' ' . $requester->last_name);
+                if ('' === $full_name) {
+                    $full_name = $requester->display_name;
+                }
+                $requester_label = sprintf(
+                    /* translators: 1: full name, 2: role/function */
+                    __("Demandeur : %1\$s (%2\$s)", 'portail-entreprises'),
+                    $full_name,
+                    $role_label
+                );
+            }
+        }
 
         // Approbateurs B2B de l'entreprise.
         $approvers = $wpdb->get_results(
@@ -561,8 +582,9 @@ class PE_Approval_Manager {
                 $approver->user_email,
                 sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
                 sprintf(
-                    __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\nMontant : %2\$s\nCommande n° : %3\$d\n\nApprouver ou rejeter :\n%4\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                    __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\n%2\$sMontant : %3\$s\nCommande n° : %4\$d\n\nApprouver ou rejeter :\n%5\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
                     esc_html($approver->display_name),
+                    '' !== $requester_label ? $requester_label . "\n" : '',
                     html_entity_decode(strip_tags(wc_price($amount))),
                     $order_id,
                     esc_url($approval_url)
