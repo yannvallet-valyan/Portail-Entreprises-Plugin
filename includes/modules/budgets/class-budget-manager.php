@@ -63,7 +63,13 @@ class PE_Budget_Manager {
             return true;
         }
 
-        $total  = (float) WC()->cart->get_total('raw');
+        $total = (float) WC()->cart->get_total('raw');
+
+        // Règle d'approbation applicable à ce montant.
+        if (class_exists('PE_Approval_Manager') && PE_Approval_Manager::get_instance()->requires_approval($user_id, $total)) {
+            return __('Cette commande nécessite une validation préalable. Soumettez votre panier pour approbation.', 'portail-entreprises');
+        }
+
         $result = $this->check_budget($user_id, $total);
 
         if (is_wp_error($result)) {
@@ -307,7 +313,8 @@ class PE_Budget_Manager {
     }
 
     /**
-     * Valide le budget au checkout WooCommerce.
+     * Valide le budget et les règles d'approbation au checkout WooCommerce.
+     * Bloque le checkout (notice 'error') pour les rôles et budgets qui l'exigent.
      */
     public function validate_budget_at_checkout(): void {
         $user_id = get_current_user_id();
@@ -316,9 +323,33 @@ class PE_Budget_Manager {
             return;
         }
 
-        $total  = (float) WC()->cart->get_total('raw');
-        $result = $this->check_budget($user_id, $total);
+        $role = PE_Permissions::get_user_b2b_role($user_id);
 
+        // Les demandeurs (requester) ne peuvent jamais valider le checkout directement.
+        if ('requester' === $role) {
+            wc_add_notice(
+                __('En tant que Demandeur, vous ne pouvez pas passer commande directement. Utilisez le bouton « Demander une approbation » depuis le panier.', 'portail-entreprises'),
+                'error'
+            );
+            return;
+        }
+
+        $total = (float) WC()->cart->get_total('raw');
+
+        // Bloquer si une règle d'approbation s'applique à ce montant.
+        if (class_exists('PE_Approval_Manager')) {
+            $needs_approval = PE_Approval_Manager::get_instance()->requires_approval($user_id, $total);
+            if ($needs_approval) {
+                wc_add_notice(
+                    __('Cette commande nécessite une validation préalable. Utilisez le bouton « Demander une approbation » depuis le panier.', 'portail-entreprises'),
+                    'error'
+                );
+                return;
+            }
+        }
+
+        // Vérification du budget.
+        $result = $this->check_budget($user_id, $total);
         if (is_wp_error($result)) {
             wc_add_notice($result->get_error_message(), 'error');
         }
