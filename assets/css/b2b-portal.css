@@ -750,3 +750,34 @@
         gap: 6px;
     }
 }
+
+/* =========================================================
+   Blocage checkout (budget dépassé / rôle demandeur)
+   ========================================================= */
+.pe-checkout-blocked {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-left: 4px solid #ffc107;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 0.9375rem;
+    color: #664d03;
+}
+
+.pe-checkout-blocked-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.pe-checkout-blocked-notice {
+    background: #f8d7da;
+    border-radius: 4px;
+    padding: 8px 12px !important;
+    color: #842029 !important;
+    font-size: 0.8125rem;
+    margin: 4px 0 8px !important;
+}

@@ -25,14 +25,109 @@ class PE_Budget_Manager {
         add_action('woocommerce_checkout_process', [$this, 'validate_budget_at_checkout']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed'], 10, 1);
 
+        // Bloquer le bouton "Valider la commande" dans le panier, le checkout et le mini-panier.
+        add_action('woocommerce_proceed_to_checkout', [$this, 'maybe_block_cart_checkout_button'], 1);
+        add_filter('woocommerce_order_button_html',   [$this, 'maybe_hide_place_order_button']);
+        add_action('woocommerce_widget_shopping_cart_buttons', [$this, 'maybe_block_minicart_button'], 1);
+
         // Cron mensuel de remise à zéro
         add_action('pe_reset_monthly_budgets', [$this, 'reset_monthly_usage']);
 
         if (!wp_next_scheduled('pe_reset_monthly_budgets')) {
-            // Planifier pour le premier jour du mois suivant à minuit
             $next_month = mktime(0, 0, 0, (int) date('n') + 1, 1, (int) date('Y'));
             wp_schedule_event($next_month, 'monthly', 'pe_reset_monthly_budgets');
         }
+    }
+
+    /**
+     * Vérifie si l'utilisateur courant peut procéder au checkout.
+     * Retourne true si autorisé, string (message d'erreur) sinon.
+     *
+     * @return true|string
+     */
+    public function get_checkout_block_reason(): true|string {
+        $user_id = get_current_user_id();
+
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return true;
+        }
+
+        // Rôle "Demandeur" : ne peut jamais commander directement.
+        $role = PE_Permissions::get_user_b2b_role($user_id);
+        if ('requester' === $role) {
+            return __('En tant que Demandeur, vous ne pouvez pas passer commande directement. Soumettez votre panier pour validation.', 'portail-entreprises');
+        }
+
+        // Vérification du budget si le panier est chargé.
+        if (!WC()->cart || WC()->cart->is_empty()) {
+            return true;
+        }
+
+        $total  = (float) WC()->cart->get_total('raw');
+        $result = $this->check_budget($user_id, $total);
+
+        if (is_wp_error($result)) {
+            return $result->get_error_message();
+        }
+
+        return true;
+    }
+
+    /**
+     * Remplace le bouton "Passer la commande" dans la page panier si l'utilisateur est bloqué.
+     * Priorité 1 pour s'exécuter avant le bouton WooCommerce (priorité 20).
+     */
+    public function maybe_block_cart_checkout_button(): void {
+        $reason = $this->get_checkout_block_reason();
+        if (true === $reason) {
+            return;
+        }
+
+        // Supprimer le bouton natif WooCommerce.
+        remove_action('woocommerce_proceed_to_checkout', 'woocommerce_button_proceed_to_checkout', 20);
+
+        echo '<div class="woocommerce-info pe-checkout-blocked">'
+            . '<span class="pe-checkout-blocked-icon">⛔</span> '
+            . wp_kses_post($reason)
+            . '</div>';
+    }
+
+    /**
+     * Masque le bouton "Passer la commande" sur la page checkout si bloqué.
+     */
+    public function maybe_hide_place_order_button(string $button_html): string {
+        $reason = $this->get_checkout_block_reason();
+        if (true === $reason) {
+            return $button_html;
+        }
+
+        return '<div class="woocommerce-error pe-checkout-blocked" style="margin-top:16px;">'
+            . wp_kses_post($reason)
+            . '</div>';
+    }
+
+    /**
+     * Remplace le bouton checkout dans le mini-panier si bloqué.
+     * Priorité 1 pour s'exécuter avant les boutons natifs (priorité 10).
+     */
+    public function maybe_block_minicart_button(): void {
+        $reason = $this->get_checkout_block_reason();
+        if (true === $reason) {
+            return;
+        }
+
+        // Supprimer les boutons natifs (View Cart + Checkout).
+        remove_action('woocommerce_widget_shopping_cart_buttons', 'woocommerce_widget_shopping_cart_button_view_cart', 10);
+        remove_action('woocommerce_widget_shopping_cart_buttons', 'woocommerce_widget_shopping_cart_proceed_to_checkout', 20);
+
+        echo '<p class="woocommerce-mini-cart__buttons pe-checkout-blocked-mini">'
+            . '<a href="' . esc_url(wc_get_cart_url()) . '" class="button wc-forward">'
+            . esc_html__('Voir le panier', 'portail-entreprises')
+            . '</a>'
+            . '</p>'
+            . '<p class="pe-checkout-blocked-notice" style="font-size:0.85em;color:#b32d2e;margin:8px 0 0;padding:0 16px;">'
+            . wp_kses_post($reason)
+            . '</p>';
     }
 
     /**

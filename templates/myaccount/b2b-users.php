@@ -103,7 +103,7 @@ $all_roles     = PE_Permissions::get_roles();
                             </td>
                             <td>
                                 <?php if ($member->budget_monthly !== null) : ?>
-                                    <?php echo esc_html(wc_price($member->budget_monthly)); ?>
+                                    <?php echo wp_kses_post(wc_price($member->budget_monthly)); ?>
                                 <?php else : ?>
                                     <em><?php esc_html_e('Illimité', 'portail-entreprises'); ?></em>
                                 <?php endif; ?>
