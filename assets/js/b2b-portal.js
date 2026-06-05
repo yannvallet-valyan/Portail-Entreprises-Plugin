@@ -210,15 +210,19 @@
             var blockMsg       = peB2B.checkoutBlockMsg || '';
             var approvalHtml   = peB2B.approvalButtonHtml || '';
 
-            var $noticeHtml = $(
-                '<div class="woocommerce-info pe-checkout-blocked" style="margin:12px 0;">' +
-                '<span class="pe-checkout-blocked-icon">⛔</span> ' +
-                self.escHtml(blockMsg) +
-                '</div>' +
-                approvalHtml
-            );
+            var buildNotice = function () {
+                return $(
+                    '<div class="pe-checkout-blocked-wrap">' +
+                    '<div class="woocommerce-info pe-checkout-blocked" style="margin:12px 0;">' +
+                    '<span class="pe-checkout-blocked-icon">⛔</span> ' +
+                    self.escHtml(blockMsg) +
+                    '</div>' +
+                    approvalHtml +
+                    '</div>'
+                );
+            };
 
-            // Sélecteurs couvrant WooCommerce standard + WoodMart.
+            // Bouton "Passer commande" page panier + checkout (WooCommerce + WoodMart).
             var checkoutBtnSelectors = [
                 '.checkout-button',
                 '.wc-proceed-to-checkout .button',
@@ -228,35 +232,55 @@
                 '#place_order'
             ].join(', ');
 
+            // Bouton checkout du mini-panier.
             var minicartBtnSelectors = [
                 '.woocommerce-mini-cart__buttons .checkout',
-                '.woocommerce-mini-cart__buttons .button',
                 '.widget_shopping_cart_content .checkout',
                 '.woodmart-mini-cart .checkout'
             ].join(', ');
 
             var doBlock = function () {
-                // Page panier + checkout : remplacer les boutons
+                // Conteneurs uniques : on insère une seule notice par conteneur.
+                var seenContainers = [];
+
                 $(checkoutBtnSelectors).each(function () {
                     var $btn = $(this);
-                    if (!$btn.closest('.pe-checkout-blocked-wrap').length && !$btn.data('pe-blocked')) {
-                        $btn.data('pe-blocked', true).hide();
-                        $btn.after($noticeHtml.clone());
+                    if ($btn.data('pe-blocked')) {
+                        return;
                     }
+                    $btn.data('pe-blocked', true).hide();
+
+                    // Conteneur parent (zone des boutons) — éviter les doublons.
+                    var $container = $btn.parent();
+                    if (seenContainers.indexOf($container[0]) !== -1) {
+                        return;
+                    }
+                    if ($container.children('.pe-checkout-blocked-wrap').length) {
+                        return;
+                    }
+                    seenContainers.push($container[0]);
+                    $btn.after(buildNotice());
                 });
 
-                // Mini-panier : cacher le bouton checkout, garder "Voir le panier"
+                // Mini-panier : cacher le bouton checkout, garder "Voir le panier".
                 $(minicartBtnSelectors).each(function () {
                     var $btn = $(this);
-                    if (!$btn.data('pe-blocked')) {
-                        $btn.data('pe-blocked', true).hide();
+                    if ($btn.data('pe-blocked')) {
+                        return;
                     }
+                    $btn.data('pe-blocked', true).hide();
+
+                    var $container = $btn.parent();
+                    if ($container.children('.pe-checkout-blocked-wrap').length) {
+                        return;
+                    }
+                    $btn.after(buildNotice());
                 });
             };
 
-            // Exécuter immédiatement + après mise à jour du panier (fragments WooCommerce)
+            // Exécuter immédiatement + après mise à jour du panier (fragments WooCommerce).
             doBlock();
-            $(document.body).on('wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout', doBlock);
+            $(document.body).on('wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout updated_wc_div', doBlock);
         },
 
         /**

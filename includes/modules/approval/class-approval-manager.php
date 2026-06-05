@@ -30,7 +30,9 @@ class PE_Approval_Manager {
         add_action('wp_ajax_pe_reject_request', [$this, 'ajax_reject_request']);
 
         // Soumission d'une demande d'approbation depuis le panier (bouton dédié).
-        add_action('admin_post_pe_request_approval', [$this, 'handle_request_approval']);
+        // Traité côté front-end (template_redirect) car WC()->cart et wc_add_notice
+        // ne sont pas disponibles dans le contexte admin-post.php.
+        add_action('template_redirect', [$this, 'handle_request_approval']);
     }
 
     /**
@@ -39,9 +41,9 @@ class PE_Approval_Manager {
     public function get_approval_button_html(string $context = 'cart'): string {
         $class = 'cart' === $context ? 'button alt pe-request-approval-btn' : 'button wc-forward pe-request-approval-btn';
 
-        return '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pe-approval-request-form" style="margin-top:10px;">'
+        return '<form method="post" action="' . esc_url(wc_get_cart_url()) . '" class="pe-approval-request-form" style="margin-top:10px;">'
             . wp_nonce_field('pe_request_approval', 'pe_nonce', true, false)
-            . '<input type="hidden" name="action" value="pe_request_approval" />'
+            . '<input type="hidden" name="pe_request_approval" value="1" />'
             . '<button type="submit" class="' . esc_attr($class) . '">'
             . esc_html__('Demander une approbation', 'portail-entreprises')
             . '</button>'
@@ -53,6 +55,10 @@ class PE_Approval_Manager {
      * Crée une commande en statut "en attente de validation".
      */
     public function handle_request_approval(): void {
+        if (!isset($_POST['pe_request_approval'])) {
+            return;
+        }
+
         if (!isset($_POST['pe_nonce']) || !wp_verify_nonce(sanitize_key($_POST['pe_nonce']), 'pe_request_approval')) {
             wp_die(esc_html__('Erreur de sécurité.', 'portail-entreprises'));
         }
