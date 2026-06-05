@@ -59,6 +59,10 @@ class PE_Core {
         // Sauvegarde du centre de coût sur la commande
         add_action('woocommerce_checkout_create_order', [$this, 'save_cost_center_to_order'], 10, 2);
 
+        // Affichage des infos B2B (centre de coût + référence) dans la commande.
+        add_filter('woocommerce_get_order_item_totals', [$this, 'add_b2b_order_totals_rows'], 10, 3);
+        add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'display_b2b_order_meta_admin']);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -291,26 +295,35 @@ class PE_Core {
             )
         );
 
-        if (empty($cost_centers)) {
-            return $fields;
-        }
-
-        $options = ['' => __('-- Sélectionner un centre de coût --', 'portail-entreprises')];
-        foreach ($cost_centers as $cc) {
-            $label = esc_html($cc->name);
-            if ($cc->code) {
-                $label .= ' (' . esc_html($cc->code) . ')';
+        // Centre de coût (si l'entreprise en a défini).
+        if (!empty($cost_centers)) {
+            $options = ['' => __('-- Sélectionner un centre de coût --', 'portail-entreprises')];
+            foreach ($cost_centers as $cc) {
+                $label = esc_html($cc->name);
+                if ($cc->code) {
+                    $label .= ' (' . esc_html($cc->code) . ')';
+                }
+                $options[(int) $cc->id] = $label;
             }
-            $options[(int) $cc->id] = $label;
+
+            $fields['order']['b2b_cost_center'] = [
+                'type'     => 'select',
+                'label'    => __('Centre de coût', 'portail-entreprises'),
+                'required' => false,
+                'class'    => ['form-row-wide'],
+                'options'  => $options,
+                'priority' => 5,
+            ];
         }
 
-        $fields['order']['b2b_cost_center'] = [
-            'type'     => 'select',
-            'label'    => __('Centre de coût', 'portail-entreprises'),
-            'required' => false,
-            'class'    => ['form-row-wide'],
-            'options'  => $options,
-            'priority' => 5,
+        // Référence personnelle (toujours disponible pour les utilisateurs B2B).
+        $fields['order']['b2b_personal_reference'] = [
+            'type'        => 'text',
+            'label'       => __('Votre référence', 'portail-entreprises'),
+            'placeholder' => __('Bon de commande, référence interne…', 'portail-entreprises'),
+            'required'    => false,
+            'class'       => ['form-row-wide'],
+            'priority'    => 6,
         ];
 
         return $fields;
@@ -320,6 +333,83 @@ class PE_Core {
         $cost_center_id = isset($_POST['b2b_cost_center']) ? absint($_POST['b2b_cost_center']) : 0;
         if ($cost_center_id > 0) {
             $order->update_meta_data('_b2b_cost_center_id', $cost_center_id);
+
+            // Stocke aussi le libellé lisible pour l'affichage.
+            global $wpdb;
+            $cc = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE id = %d LIMIT 1",
+                    $cost_center_id
+                )
+            );
+            if ($cc) {
+                $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
+                $order->update_meta_data('_b2b_cost_center_label', $label);
+            }
         }
+
+        $reference = isset($_POST['b2b_personal_reference'])
+            ? sanitize_text_field(wp_unslash($_POST['b2b_personal_reference']))
+            : '';
+        if ('' !== $reference) {
+            $order->update_meta_data('_b2b_personal_reference', $reference);
+        }
+    }
+
+    /**
+     * Ajoute les lignes "Centre de coût" et "Votre référence" dans le récapitulatif
+     * de commande (Mon Compte, page commande, emails).
+     */
+    public function add_b2b_order_totals_rows(array $total_rows, \WC_Order $order, $tax_display = ''): array {
+        $cost_center = $order->get_meta('_b2b_cost_center_label');
+        $reference   = $order->get_meta('_b2b_personal_reference');
+
+        if (empty($cost_center) && empty($reference)) {
+            return $total_rows;
+        }
+
+        $new_rows = [];
+        foreach ($total_rows as $key => $row) {
+            // Insère nos lignes juste avant le total final.
+            if ('order_total' === $key) {
+                if (!empty($cost_center)) {
+                    $new_rows['b2b_cost_center'] = [
+                        'label' => __('Centre de coût :', 'portail-entreprises'),
+                        'value' => esc_html($cost_center),
+                    ];
+                }
+                if (!empty($reference)) {
+                    $new_rows['b2b_personal_reference'] = [
+                        'label' => __('Votre référence :', 'portail-entreprises'),
+                        'value' => esc_html($reference),
+                    ];
+                }
+            }
+            $new_rows[$key] = $row;
+        }
+
+        return $new_rows;
+    }
+
+    /**
+     * Affiche les infos B2B dans l'écran d'édition de commande (admin).
+     */
+    public function display_b2b_order_meta_admin(\WC_Order $order): void {
+        $cost_center = $order->get_meta('_b2b_cost_center_label');
+        $reference   = $order->get_meta('_b2b_personal_reference');
+
+        if (empty($cost_center) && empty($reference)) {
+            return;
+        }
+
+        echo '<div class="pe-admin-order-meta" style="margin-top:12px;">';
+        echo '<h4>' . esc_html__('Informations B2B', 'portail-entreprises') . '</h4>';
+        if (!empty($cost_center)) {
+            echo '<p><strong>' . esc_html__('Centre de coût :', 'portail-entreprises') . '</strong> ' . esc_html($cost_center) . '</p>';
+        }
+        if (!empty($reference)) {
+            echo '<p><strong>' . esc_html__('Référence client :', 'portail-entreprises') . '</strong> ' . esc_html($reference) . '</p>';
+        }
+        echo '</div>';
     }
 }

@@ -41,13 +41,59 @@ class PE_Approval_Manager {
     public function get_approval_button_html(string $context = 'cart'): string {
         $class = 'cart' === $context ? 'button alt pe-request-approval-btn' : 'button wc-forward pe-request-approval-btn';
 
+        // Champs centre de coût + référence personnelle.
+        $extra_fields = $this->get_b2b_order_fields_html();
+
         return '<form method="post" action="' . esc_url(wc_get_cart_url()) . '" class="pe-approval-request-form" style="margin-top:10px;">'
             . wp_nonce_field('pe_request_approval', 'pe_nonce', true, false)
             . '<input type="hidden" name="pe_request_approval" value="1" />'
+            . $extra_fields
             . '<button type="submit" class="' . esc_attr($class) . '">'
             . esc_html__('Demander une approbation', 'portail-entreprises')
             . '</button>'
             . '</form>';
+    }
+
+    /**
+     * Génère les champs "Centre de coût" et "Votre référence" pour le formulaire d'approbation.
+     */
+    private function get_b2b_order_fields_html(): string {
+        $user_id = get_current_user_id();
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company) {
+            return '';
+        }
+
+        global $wpdb;
+        $cost_centers = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE company_id = %d ORDER BY name ASC",
+                (int) $company->id
+            )
+        );
+
+        $html = '<div class="pe-approval-fields" style="margin:10px 0;text-align:left;">';
+
+        if (!empty($cost_centers)) {
+            $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
+                . esc_html__('Centre de coût', 'portail-entreprises') . '</label>'
+                . '<select name="b2b_cost_center" style="width:100%;">'
+                . '<option value="">' . esc_html__('-- Sélectionner --', 'portail-entreprises') . '</option>';
+            foreach ($cost_centers as $cc) {
+                $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
+                $html .= '<option value="' . esc_attr((int) $cc->id) . '">' . esc_html($label) . '</option>';
+            }
+            $html .= '</select></p>';
+        }
+
+        $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
+            . esc_html__('Votre référence', 'portail-entreprises') . '</label>'
+            . '<input type="text" name="b2b_personal_reference" style="width:100%;" '
+            . 'placeholder="' . esc_attr__('Bon de commande, référence interne…', 'portail-entreprises') . '" /></p>';
+
+        $html .= '</div>';
+
+        return $html;
     }
 
     /**
@@ -74,7 +120,12 @@ class PE_Approval_Manager {
             exit;
         }
 
-        $order = $this->create_order_from_cart($user_id);
+        $cost_center_id = isset($_POST['b2b_cost_center']) ? absint($_POST['b2b_cost_center']) : 0;
+        $reference      = isset($_POST['b2b_personal_reference'])
+            ? sanitize_text_field(wp_unslash($_POST['b2b_personal_reference']))
+            : '';
+
+        $order = $this->create_order_from_cart($user_id, $cost_center_id, $reference);
 
         if (!$order instanceof \WC_Order) {
             wc_add_notice(__('Impossible de créer la demande. Veuillez réessayer.', 'portail-entreprises'), 'error');
@@ -85,7 +136,7 @@ class PE_Approval_Manager {
         $amount = (float) $order->get_total();
         $order->update_status('pending-approval', __('Commande soumise à validation par le demandeur.', 'portail-entreprises'));
 
-        $this->create_approval_request((int) $order->get_id(), $user_id, $amount, null);
+        $this->create_approval_request((int) $order->get_id(), $user_id, $amount, $cost_center_id > 0 ? $cost_center_id : null);
 
         // Vider le panier après soumission.
         WC()->cart->empty_cart();
@@ -102,7 +153,8 @@ class PE_Approval_Manager {
     /**
      * Construit une commande WooCommerce à partir du panier courant.
      */
-    private function create_order_from_cart(int $user_id): ?\WC_Order {
+    private function create_order_from_cart(int $user_id, int $cost_center_id = 0, string $reference = ''): ?\WC_Order {
+        global $wpdb;
         $cart = WC()->cart;
 
         try {
@@ -148,6 +200,25 @@ class PE_Approval_Manager {
 
             $order->set_created_via('b2b-approval-request');
             $order->update_meta_data('_b2b_approval_request', 1);
+
+            // Centre de coût + référence personnelle.
+            if ($cost_center_id > 0) {
+                $order->update_meta_data('_b2b_cost_center_id', $cost_center_id);
+                $cc = $wpdb->get_row(
+                    $wpdb->prepare(
+                        "SELECT name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE id = %d LIMIT 1",
+                        $cost_center_id
+                    )
+                );
+                if ($cc) {
+                    $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
+                    $order->update_meta_data('_b2b_cost_center_label', $label);
+                }
+            }
+            if ('' !== $reference) {
+                $order->update_meta_data('_b2b_personal_reference', $reference);
+            }
+
             $order->calculate_totals();
             $order->save();
 
