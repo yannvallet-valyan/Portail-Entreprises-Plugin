@@ -61,10 +61,19 @@ class PE_Admin {
             'portail-b2b-settings',
             [$this, 'render_settings_page']
         );
+
+        add_submenu_page(
+            'portail-b2b',
+            __('Magic Links', 'portail-entreprises'),
+            __('Magic Links', 'portail-entreprises'),
+            'manage_woocommerce',
+            'portail-b2b-magic-links',
+            [$this, 'render_magic_links_page']
+        );
     }
 
     public function enqueue_admin_assets(string $hook): void {
-        $b2b_pages = ['toplevel_page_portail-b2b', 'portail-b2b_page_portail-b2b-settings'];
+        $b2b_pages = ['toplevel_page_portail-b2b', 'portail-b2b_page_portail-b2b-settings', 'portail-b2b_page_portail-b2b-magic-links'];
 
         if (!in_array($hook, $b2b_pages, true) && 'user-edit.php' !== $hook && 'profile.php' !== $hook) {
             return;
@@ -206,9 +215,17 @@ class PE_Admin {
         if (isset($_POST['pe_save_settings']) && isset($_POST['_wpnonce'])) {
             check_admin_referer('pe_save_settings', '_wpnonce');
 
+            $ml_validity = sanitize_key($_POST['magic_link_validity'] ?? '7d');
+            if (!array_key_exists($ml_validity, PE_Magic_Link_Manager::DURATIONS) && 'custom' !== $ml_validity) {
+                $ml_validity = '7d';
+            }
+
             $settings = [
-                'require_approval_all'  => isset($_POST['require_approval_all']) ? 1 : 0,
-                'default_payment_terms' => (int) ($_POST['default_payment_terms'] ?? 30),
+                'require_approval_all'             => isset($_POST['require_approval_all']) ? 1 : 0,
+                'default_payment_terms'            => (int) ($_POST['default_payment_terms'] ?? 30),
+                'magic_link_enabled'               => isset($_POST['magic_link_enabled']) ? 1 : 0,
+                'magic_link_validity'              => $ml_validity,
+                'magic_link_validity_custom_hours' => max(1, (int) ($_POST['magic_link_validity_custom_hours'] ?? 168)),
             ];
 
             update_option('pe_settings', $settings);
@@ -217,6 +234,7 @@ class PE_Admin {
 
         $settings = get_option('pe_settings', []);
         settings_errors('pe_messages');
+        $ml_validity = $settings['magic_link_validity'] ?? '7d';
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Paramètres du Portail B2B', 'portail-entreprises'); ?></h1>
@@ -241,6 +259,40 @@ class PE_Admin {
                             </label>
                         </td>
                     </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Magic Links', 'portail-entreprises'); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="magic_link_enabled"
+                                       value="1" <?php checked($settings['magic_link_enabled'] ?? 1, 1); ?> />
+                                <?php esc_html_e('Activer les liens de validation par e-mail (Magic Links)', 'portail-entreprises'); ?>
+                            </label>
+                            <p class="description"><?php esc_html_e('Permet aux approbateurs de valider ou refuser une demande directement depuis leur e-mail, sans se connecter.', 'portail-entreprises'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Durée de validité des liens', 'portail-entreprises'); ?></th>
+                        <td>
+                            <select name="magic_link_validity" id="pe-ml-validity">
+                                <option value="24h" <?php selected($ml_validity, '24h'); ?>><?php esc_html_e('24 heures', 'portail-entreprises'); ?></option>
+                                <option value="48h" <?php selected($ml_validity, '48h'); ?>><?php esc_html_e('48 heures', 'portail-entreprises'); ?></option>
+                                <option value="7d"  <?php selected($ml_validity, '7d'); ?>><?php esc_html_e('7 jours', 'portail-entreprises'); ?></option>
+                                <option value="14d" <?php selected($ml_validity, '14d'); ?>><?php esc_html_e('14 jours', 'portail-entreprises'); ?></option>
+                                <option value="custom" <?php selected($ml_validity, 'custom'); ?>><?php esc_html_e('Personnalisé', 'portail-entreprises'); ?></option>
+                            </select>
+                            <span id="pe-ml-custom-wrap" style="<?php echo 'custom' === $ml_validity ? '' : 'display:none;'; ?> margin-left:10px;">
+                                <input type="number" name="magic_link_validity_custom_hours"
+                                       value="<?php echo esc_attr($settings['magic_link_validity_custom_hours'] ?? 168); ?>"
+                                       min="1" max="8760" class="small-text" />
+                                <?php esc_html_e('heures', 'portail-entreprises'); ?>
+                            </span>
+                            <script>
+                            document.getElementById('pe-ml-validity').addEventListener('change', function() {
+                                document.getElementById('pe-ml-custom-wrap').style.display = this.value === 'custom' ? '' : 'none';
+                            });
+                            </script>
+                        </td>
+                    </tr>
                 </table>
                 <p class="submit">
                     <input type="submit" name="pe_save_settings" class="button-primary"
@@ -248,6 +300,129 @@ class PE_Admin {
                 </p>
             </form>
         </div>
+        <?php
+    }
+
+    public function render_magic_links_page(): void {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        if (!class_exists('PE_Magic_Link_Manager')) {
+            echo '<div class="wrap"><p>' . esc_html__('Module Magic Links non disponible.', 'portail-entreprises') . '</p></div>';
+            return;
+        }
+
+        $status_filter = isset($_GET['status']) ? sanitize_key($_GET['status']) : '';
+        $tokens        = PE_Magic_Link_Manager::get_instance()->get_tokens($status_filter, 200);
+
+        $status_labels = [
+            'active'  => __('Actif', 'portail-entreprises'),
+            'used'    => __('Utilisé', 'portail-entreprises'),
+            'expired' => __('Expiré', 'portail-entreprises'),
+            'revoked' => __('Révoqué', 'portail-entreprises'),
+        ];
+        $status_colors = [
+            'active'  => '#28a745',
+            'used'    => '#2d6ebd',
+            'expired' => '#888',
+            'revoked' => '#dc3545',
+        ];
+        ?>
+        <div class="wrap">
+            <h1><?php esc_html_e('Magic Links — Jetons d\'approbation', 'portail-entreprises'); ?></h1>
+
+            <ul class="subsubsub" style="margin-bottom:12px;">
+                <li><a href="<?php echo esc_url(admin_url('admin.php?page=portail-b2b-magic-links')); ?>" <?php echo '' === $status_filter ? 'class="current"' : ''; ?>><?php esc_html_e('Tous', 'portail-entreprises'); ?></a> |</li>
+                <?php foreach ($status_labels as $s => $label) : ?>
+                <li><a href="<?php echo esc_url(admin_url('admin.php?page=portail-b2b-magic-links&status=' . $s)); ?>" <?php echo $s === $status_filter ? 'class="current"' : ''; ?>><?php echo esc_html($label); ?></a><?php echo $s !== array_key_last($status_labels) ? ' |' : ''; ?></li>
+                <?php endforeach; ?>
+            </ul>
+
+            <table class="wp-list-table widefat fixed striped" style="font-size:13px;">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e('ID', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Approbateur', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Demande', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Commande', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Créé le', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Expire le', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Utilisé le', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Action effectuée', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Actions', 'portail-entreprises'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($tokens)) : ?>
+                    <tr><td colspan="10" style="text-align:center;"><?php esc_html_e('Aucun jeton trouvé.', 'portail-entreprises'); ?></td></tr>
+                    <?php else : ?>
+                    <?php foreach ($tokens as $token) : ?>
+                    <tr data-token-id="<?php echo esc_attr((string) $token->id); ?>" data-request-id="<?php echo esc_attr((string) $token->request_id); ?>">
+                        <td><?php echo esc_html((string) $token->id); ?></td>
+                        <td><?php echo esc_html($token->approver_name ?: '—'); ?></td>
+                        <td>#<?php echo esc_html((string) $token->request_id); ?></td>
+                        <td><?php echo $token->order_id ? '#' . esc_html((string) $token->order_id) : '—'; ?></td>
+                        <td><span style="color:<?php echo esc_attr($status_colors[$token->status] ?? '#333'); ?>;font-weight:600;"><?php echo esc_html($status_labels[$token->status] ?? $token->status); ?></span></td>
+                        <td><?php echo esc_html(date_i18n(get_option('date_format') . ' H:i', strtotime($token->created_at))); ?></td>
+                        <td><?php echo esc_html(date_i18n(get_option('date_format') . ' H:i', strtotime($token->expires_at))); ?></td>
+                        <td><?php echo $token->used_at ? esc_html(date_i18n(get_option('date_format') . ' H:i', strtotime($token->used_at))) : '—'; ?></td>
+                        <td><?php echo $token->used_action ? esc_html($token->used_action) : '—'; ?></td>
+                        <td>
+                            <?php if ('active' === $token->status) : ?>
+                            <button class="button button-small pe-ml-revoke-btn"
+                                    data-token-id="<?php echo esc_attr((string) $token->id); ?>">
+                                <?php esc_html_e('Révoquer', 'portail-entreprises'); ?>
+                            </button>
+                            <?php endif; ?>
+                            <?php if ('pending' === ($token->request_status ?? '') ) : ?>
+                            <button class="button button-small pe-ml-resend-btn"
+                                    data-request-id="<?php echo esc_attr((string) $token->request_id); ?>"
+                                    style="margin-left:4px;">
+                                <?php esc_html_e('Renvoyer l\'e-mail', 'portail-entreprises'); ?>
+                            </button>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <script>
+        jQuery(function($) {
+            var nonce = '<?php echo esc_js(wp_create_nonce('pe_b2b_ajax')); ?>';
+
+            $(document).on('click', '.pe-ml-revoke-btn', function() {
+                if (!confirm('<?php esc_js(esc_html__('Révoquer ce jeton ?', 'portail-entreprises')); ?>')) return;
+                var $btn = $(this), tokenId = $btn.data('token-id');
+                $.post(ajaxurl, { action: 'pe_revoke_token', nonce: nonce, token_id: tokenId }, function(res) {
+                    if (res.success) {
+                        $btn.closest('tr').find('span').first().text('<?php echo esc_js(esc_html__('Révoqué', 'portail-entreprises')); ?>').css('color', '#dc3545');
+                        $btn.remove();
+                    } else {
+                        alert(res.data.message);
+                    }
+                });
+            });
+
+            $(document).on('click', '.pe-ml-resend-btn', function() {
+                var $btn = $(this), requestId = $btn.data('request-id');
+                $btn.prop('disabled', true).text('<?php echo esc_js(esc_html__('Envoi…', 'portail-entreprises')); ?>');
+                $.post(ajaxurl, { action: 'pe_resend_approval_email', nonce: nonce, request_id: requestId }, function(res) {
+                    if (res.success) {
+                        alert(res.data.message);
+                        $btn.text('<?php echo esc_js(esc_html__('Renvoyer l\'e-mail', 'portail-entreprises')); ?>').prop('disabled', false);
+                    } else {
+                        alert(res.data.message);
+                        $btn.prop('disabled', false).text('<?php echo esc_js(esc_html__('Renvoyer l\'e-mail', 'portail-entreprises')); ?>');
+                    }
+                });
+            });
+        });
+        </script>
         <?php
     }
 

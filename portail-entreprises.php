@@ -17,10 +17,10 @@
 defined('ABSPATH') || exit;
 
 // Constants
-define('PE_VERSION', '1.0.1');
+define('PE_VERSION', '1.1.0');
 define('PE_PATH', plugin_dir_path(__FILE__));
 define('PE_URL', plugin_dir_url(__FILE__));
-define('PE_DB_VERSION', '1.0.0');
+define('PE_DB_VERSION', '1.1.0');
 
 // Declare WooCommerce HPOS compatibility
 add_action('before_woocommerce_init', function () {
@@ -72,6 +72,7 @@ add_action('plugins_loaded', function () {
     require_once PE_PATH . 'includes/modules/users/class-user-manager.php';
     require_once PE_PATH . 'includes/modules/budgets/class-budget-manager.php';
     require_once PE_PATH . 'includes/modules/approval/class-approval-manager.php';
+    require_once PE_PATH . 'includes/modules/approval/class-magic-link-manager.php';
     require_once PE_PATH . 'includes/class-core.php';
 
     PE_Core::get_instance();

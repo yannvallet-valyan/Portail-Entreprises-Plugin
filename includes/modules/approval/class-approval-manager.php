@@ -577,19 +577,50 @@ class PE_Approval_Manager {
             )
         ) ?: [];
 
+        $use_magic_links = class_exists('PE_Magic_Link_Manager') && PE_Magic_Link_Manager::get_instance()->is_enabled();
+
         foreach ($approvers as $approver) {
-            wp_mail(
-                $approver->user_email,
-                sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
-                sprintf(
-                    __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\n%2\$sMontant : %3\$s\nCommande n° : %4\$d\n\nApprouver ou rejeter :\n%5\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
-                    esc_html($approver->display_name),
-                    '' !== $requester_label ? $requester_label . "\n" : '',
-                    html_entity_decode(strip_tags(wc_price($amount))),
-                    $order_id,
-                    esc_url($approval_url)
-                )
-            );
+            $approver_user = get_user_by('email', $approver->user_email);
+            $approver_id   = $approver_user ? (int) $approver_user->ID : 0;
+
+            $magic_buttons = '';
+            if ($use_magic_links && $approver_id > 0) {
+                $magic_buttons = PE_Magic_Link_Manager::get_instance()->get_email_buttons_html($request_id, $approver_id);
+            }
+
+            if ($magic_buttons) {
+                $headers = ['Content-Type: text/html; charset=UTF-8'];
+                $body    = '<html><body style="font-family:sans-serif;color:#1a2744;">'
+                    . '<p>' . sprintf(esc_html__('Bonjour %s,', 'portail-entreprises'), esc_html($approver->display_name)) . '</p>'
+                    . '<p>' . esc_html__('Une nouvelle commande nécessite votre validation.', 'portail-entreprises') . '</p>'
+                    . ('' !== $requester_label ? '<p>' . esc_html($requester_label) . '</p>' : '')
+                    . '<p><strong>' . esc_html__('Montant :', 'portail-entreprises') . '</strong> ' . wp_kses_post(wc_price($amount)) . '</p>'
+                    . '<p><strong>' . esc_html__('Commande n° :', 'portail-entreprises') . '</strong> ' . (int) $order_id . '</p>'
+                    . $magic_buttons
+                    . '<p style="font-size:13px;color:#666;">' . esc_html__('Vous pouvez aussi accéder à votre espace approbations :', 'portail-entreprises') . ' <a href="' . esc_url($approval_url) . '">' . esc_url($approval_url) . '</a></p>'
+                    . '<p>' . esc_html__('Cordialement,', 'portail-entreprises') . '<br>' . esc_html__('Le portail B2B', 'portail-entreprises') . '</p>'
+                    . '</body></html>';
+
+                wp_mail(
+                    $approver->user_email,
+                    sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
+                    $body,
+                    $headers
+                );
+            } else {
+                wp_mail(
+                    $approver->user_email,
+                    sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
+                    sprintf(
+                        __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\n%2\$sMontant : %3\$s\nCommande n° : %4\$d\n\nApprouver ou rejeter :\n%5\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                        esc_html($approver->display_name),
+                        '' !== $requester_label ? $requester_label . "\n" : '',
+                        html_entity_decode(strip_tags(wc_price($amount))),
+                        $order_id,
+                        esc_url($approval_url)
+                    )
+                );
+            }
         }
 
         // Administrateurs WP et gestionnaires de boutique — notification via email WooCommerce.
@@ -710,5 +741,25 @@ class PE_Approval_Manager {
         } else {
             wp_send_json_error(['message' => __('Impossible de rejeter cette demande.', 'portail-entreprises')]);
         }
+    }
+
+    /**
+     * Renvoie l'e-mail de notification aux approbateurs (utilisé par le Magic Link admin resend).
+     */
+    public function resend_approval_notification(int $request_id): void {
+        global $wpdb;
+
+        $request = $this->get_request($request_id);
+        if (!$request) {
+            return;
+        }
+
+        $this->notify_approvers(
+            $request_id,
+            (int) $request->company_id,
+            (float) $request->amount,
+            (int) $request->order_id,
+            (int) $request->requester_id
+        );
     }
 }

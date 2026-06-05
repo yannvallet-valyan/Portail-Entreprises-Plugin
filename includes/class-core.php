@@ -69,6 +69,7 @@ class PE_Core {
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
+        PE_Magic_Link_Manager::get_instance()->init();
 
         // Admin
         if (is_admin()) {

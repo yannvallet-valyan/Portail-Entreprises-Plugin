@@ -153,6 +153,27 @@ class PE_Installer {
             KEY status (status)
         ) ENGINE=InnoDB {$charset_collate};";
 
+        // Table approval_tokens (Magic Link)
+        $sql_approval_tokens = "CREATE TABLE IF NOT EXISTS {$prefix}approval_tokens (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            request_id BIGINT UNSIGNED NOT NULL,
+            approver_id BIGINT UNSIGNED NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            action VARCHAR(20) NOT NULL DEFAULT 'decision',
+            status ENUM('active','used','expired','revoked') NOT NULL DEFAULT 'active',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME DEFAULT NULL,
+            used_action VARCHAR(20) DEFAULT NULL,
+            ip_address VARCHAR(45) NOT NULL DEFAULT '',
+            user_agent VARCHAR(255) NOT NULL DEFAULT '',
+            PRIMARY KEY (id),
+            UNIQUE KEY token_hash (token_hash),
+            KEY request_id (request_id),
+            KEY approver_id (approver_id),
+            KEY status (status)
+        ) ENGINE=InnoDB {$charset_collate};";
+
         // Table audit_log
         $sql_audit_log = "CREATE TABLE IF NOT EXISTS {$prefix}audit_log (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -180,6 +201,7 @@ class PE_Installer {
             $sql_budget_usage,
             $sql_approval_rules,
             $sql_approval_requests,
+            $sql_approval_tokens,
             $sql_audit_log,
         ];
 
