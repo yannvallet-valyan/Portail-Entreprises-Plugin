@@ -90,6 +90,20 @@ class PE_Budget_Manager {
             . '<span class="pe-checkout-blocked-icon">⛔</span> '
             . wp_kses_post($reason)
             . '</div>';
+
+        // Proposer le bouton "Demander une approbation".
+        // HTML construit en interne avec échappement ; wp_kses_post retirerait <form>/<button>.
+        echo $this->get_approval_button_for_render('cart'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    }
+
+    /**
+     * Renvoie le HTML du bouton de demande d'approbation (avec form/nonce).
+     */
+    private function get_approval_button_for_render(string $context): string {
+        if (!class_exists('PE_Approval_Manager')) {
+            return '';
+        }
+        return PE_Approval_Manager::get_instance()->get_approval_button_html($context);
     }
 
     /**
@@ -103,7 +117,8 @@ class PE_Budget_Manager {
 
         return '<div class="woocommerce-error pe-checkout-blocked" style="margin-top:16px;">'
             . wp_kses_post($reason)
-            . '</div>';
+            . '</div>'
+            . $this->get_approval_button_for_render('cart');
     }
 
     /**
@@ -128,6 +143,9 @@ class PE_Budget_Manager {
             . '<p class="pe-checkout-blocked-notice" style="font-size:0.85em;color:#b32d2e;margin:8px 0 0;padding:0 16px;">'
             . wp_kses_post($reason)
             . '</p>';
+
+        // Bouton "Demander une approbation" dans le mini-panier.
+        echo $this->get_approval_button_for_render('minicart'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     /**

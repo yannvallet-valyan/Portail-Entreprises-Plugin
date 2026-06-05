@@ -28,7 +28,129 @@ class PE_Approval_Manager {
         // AJAX handlers pour approbation/rejet
         add_action('wp_ajax_pe_approve_request', [$this, 'ajax_approve_request']);
         add_action('wp_ajax_pe_reject_request', [$this, 'ajax_reject_request']);
+
+        // Soumission d'une demande d'approbation depuis le panier (bouton dédié).
+        add_action('admin_post_pe_request_approval', [$this, 'handle_request_approval']);
     }
+
+    /**
+     * Génère le HTML du bouton "Demander une approbation".
+     */
+    public function get_approval_button_html(string $context = 'cart'): string {
+        $class = 'cart' === $context ? 'button alt pe-request-approval-btn' : 'button wc-forward pe-request-approval-btn';
+
+        return '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pe-approval-request-form" style="margin-top:10px;">'
+            . wp_nonce_field('pe_request_approval', 'pe_nonce', true, false)
+            . '<input type="hidden" name="action" value="pe_request_approval" />'
+            . '<button type="submit" class="' . esc_attr($class) . '">'
+            . esc_html__('Demander une approbation', 'portail-entreprises')
+            . '</button>'
+            . '</form>';
+    }
+
+    /**
+     * Traite la soumission du panier comme une demande d'approbation.
+     * Crée une commande en statut "en attente de validation".
+     */
+    public function handle_request_approval(): void {
+        if (!isset($_POST['pe_nonce']) || !wp_verify_nonce(sanitize_key($_POST['pe_nonce']), 'pe_request_approval')) {
+            wp_die(esc_html__('Erreur de sécurité.', 'portail-entreprises'));
+        }
+
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        if (!WC()->cart || WC()->cart->is_empty()) {
+            wc_add_notice(__('Votre panier est vide.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_cart_url());
+            exit;
+        }
+
+        $order = $this->create_order_from_cart($user_id);
+
+        if (!$order instanceof \WC_Order) {
+            wc_add_notice(__('Impossible de créer la demande. Veuillez réessayer.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_cart_url());
+            exit;
+        }
+
+        $amount = (float) $order->get_total();
+        $order->update_status('pending-approval', __('Commande soumise à validation par le demandeur.', 'portail-entreprises'));
+
+        $this->create_approval_request((int) $order->get_id(), $user_id, $amount, null);
+
+        // Vider le panier après soumission.
+        WC()->cart->empty_cart();
+
+        wc_add_notice(
+            __('Votre demande a été soumise pour validation. Vous serez notifié dès qu\'un responsable l\'aura approuvée.', 'portail-entreprises'),
+            'success'
+        );
+
+        wp_safe_redirect(wc_get_account_endpoint_url('orders'));
+        exit;
+    }
+
+    /**
+     * Construit une commande WooCommerce à partir du panier courant.
+     */
+    private function create_order_from_cart(int $user_id): ?\WC_Order {
+        $cart = WC()->cart;
+
+        try {
+            $order = wc_create_order(['customer_id' => $user_id]);
+
+            if (is_wp_error($order)) {
+                return null;
+            }
+
+            // Ajout des produits du panier.
+            foreach ($cart->get_cart() as $cart_item) {
+                $order->add_product(
+                    $cart_item['data'],
+                    $cart_item['quantity'],
+                    [
+                        'subtotal' => $cart_item['line_subtotal'],
+                        'total'    => $cart_item['line_total'],
+                    ]
+                );
+            }
+
+            // Adresses depuis le profil client.
+            $customer = new \WC_Customer($user_id);
+            $order->set_address($customer->get_billing(), 'billing');
+            $order->set_address($customer->get_shipping(), 'shipping');
+
+            // Frais de port choisis (si disponibles).
+            foreach ($cart->get_shipping_packages() as $package_key => $package) {
+                $session  = WC()->session ? WC()->session->get('chosen_shipping_methods') : [];
+                $chosen   = $session[$package_key] ?? '';
+                $rates    = $package['rates'] ?? [];
+                if ($chosen && isset($rates[$chosen])) {
+                    $item = new \WC_Order_Item_Shipping();
+                    $item->set_shipping_rate($rates[$chosen]);
+                    $order->add_item($item);
+                }
+            }
+
+            // Coupons éventuels.
+            foreach ($cart->get_applied_coupons() as $coupon_code) {
+                $order->apply_coupon($coupon_code);
+            }
+
+            $order->set_created_via('b2b-approval-request');
+            $order->update_meta_data('_b2b_approval_request', 1);
+            $order->calculate_totals();
+            $order->save();
+
+            return $order;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
 
     /**
      * Récupère la règle d'approbation applicable pour une entreprise et un montant.

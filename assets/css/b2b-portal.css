@@ -781,3 +781,19 @@
     font-size: 0.8125rem;
     margin: 4px 0 8px !important;
 }
+
+/* Bouton "Demander une approbation" */
+.pe-approval-request-form {
+    margin-top: 12px;
+}
+
+.pe-request-approval-btn {
+    background: var(--pe-blue) !important;
+    color: #fff !important;
+    border: none !important;
+    font-weight: 600 !important;
+}
+
+.pe-request-approval-btn:hover {
+    background: var(--pe-blue-hover) !important;
+}
