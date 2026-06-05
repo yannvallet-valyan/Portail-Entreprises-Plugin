@@ -21,9 +21,8 @@ $agencies         = $is_new ? [] : $manager->get_agencies($company_id);
 $cost_centers     = $is_new ? [] : $manager->get_cost_centers($company_id);
 $approval_rules   = $is_new ? [] : $manager->get_approval_rules($company_id);
 
-$nonce_action = $is_new ? 'pe_create_company' : 'pe_save_company_' . $company_id;
-
-settings_errors('pe_messages');
+$nonce_action  = $is_new ? 'pe_create_company' : 'pe_save_company_' . $company_id;
+$form_action   = $is_new ? 'pe_create_company' : 'pe_update_company';
 
 $available_modules = [
     'approvals' => __('Workflow d\'approbation', 'portail-entreprises'),
@@ -34,6 +33,18 @@ $available_modules = [
 $all_roles = PE_Permissions::get_roles();
 ?>
 <div class="wrap pe-admin-wrap">
+    <?php
+    // Affichage des messages de succès/erreur passés en query string.
+    $pe_notice = isset($_GET['pe_notice']) ? sanitize_key($_GET['pe_notice']) : '';
+    $pe_error  = isset($_GET['pe_error']) ? sanitize_text_field(wp_unslash($_GET['pe_error'])) : '';
+    if ('created' === $pe_notice) : ?>
+        <div class="notice notice-success is-dismissible"><p><?php esc_html_e('Société créée avec succès.', 'portail-entreprises'); ?></p></div>
+    <?php elseif ('updated' === $pe_notice) : ?>
+        <div class="notice notice-success is-dismissible"><p><?php esc_html_e('Société mise à jour avec succès.', 'portail-entreprises'); ?></p></div>
+    <?php elseif ($pe_error) : ?>
+        <div class="notice notice-error is-dismissible"><p><?php echo esc_html($pe_error); ?></p></div>
+    <?php endif; ?>
+
     <h1>
         <?php if ($is_new) : ?>
             <?php esc_html_e('Créer une société', 'portail-entreprises'); ?>
@@ -45,8 +56,12 @@ $all_roles = PE_Permissions::get_roles();
         &larr; <?php esc_html_e('Retour à la liste', 'portail-entreprises'); ?>
     </a>
 
-    <form method="post" action="" class="pe-company-form">
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="pe-company-form">
         <?php wp_nonce_field($nonce_action, '_wpnonce'); ?>
+        <input type="hidden" name="action" value="<?php echo esc_attr($form_action); ?>" />
+        <?php if (!$is_new) : ?>
+        <input type="hidden" name="company_id" value="<?php echo esc_attr($company_id); ?>" />
+        <?php endif; ?>
 
         <div class="pe-form-grid">
             <!-- Informations générales -->
@@ -160,7 +175,7 @@ $all_roles = PE_Permissions::get_roles();
         </div>
 
         <p class="submit">
-            <input type="submit" name="pe_save_company" class="button button-primary"
+            <input type="submit" class="button button-primary"
                    value="<?php echo $is_new ? esc_attr__('Créer la société', 'portail-entreprises') : esc_attr__('Enregistrer les modifications', 'portail-entreprises'); ?>" />
         </p>
     </form>

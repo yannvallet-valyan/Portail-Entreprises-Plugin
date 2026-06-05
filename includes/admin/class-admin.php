@@ -21,6 +21,8 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_create_cost_center', [$this, 'ajax_admin_create_cost_center']);
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
+        add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
+        add_action('admin_post_pe_update_company', [$this, 'handle_post_update_company']);
     }
 
     public static function get_instance(): self {
@@ -102,19 +104,61 @@ class PE_Admin {
         $company_id = isset($_GET['company_id']) ? absint($_GET['company_id']) : 0;
 
         if ('edit' === $action && $company_id > 0) {
-            $this->handle_company_edit_form($company_id);
             include PE_PATH . 'admin/views/company-edit.php';
         } elseif ('new' === $action) {
-            $this->handle_company_new_form();
             include PE_PATH . 'admin/views/company-edit.php';
         } else {
             include PE_PATH . 'admin/views/companies.php';
         }
     }
 
-    private function handle_company_edit_form(int $company_id): void {
-        if (!isset($_POST['pe_save_company']) || !isset($_POST['_wpnonce'])) {
-            return;
+    /**
+     * Traitement POST création société — déclenché via admin_post_ avant envoi des headers.
+     */
+    public function handle_post_create_company(): void {
+        check_admin_referer('pe_create_company', '_wpnonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        $data = [
+            'name'            => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'siret'           => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
+            'vat_number'      => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
+            'discount_rate'   => (float) ($_POST['discount_rate'] ?? 0),
+            'credit_limit'    => (float) ($_POST['credit_limit'] ?? 0),
+            'payment_terms'   => (int) ($_POST['payment_terms'] ?? 30),
+            'status'          => sanitize_key($_POST['status'] ?? 'active'),
+            'modules_enabled' => array_map('sanitize_key', (array) ($_POST['modules_enabled'] ?? [])),
+            'billing_address' => [
+                'address_1' => sanitize_text_field(wp_unslash($_POST['billing_address_1'] ?? '')),
+                'address_2' => sanitize_text_field(wp_unslash($_POST['billing_address_2'] ?? '')),
+                'city'      => sanitize_text_field(wp_unslash($_POST['billing_city'] ?? '')),
+                'postcode'  => sanitize_text_field(wp_unslash($_POST['billing_postcode'] ?? '')),
+                'country'   => sanitize_text_field(wp_unslash($_POST['billing_country'] ?? '')),
+            ],
+        ];
+
+        $result = PE_Company_Manager::get_instance()->create_company($data);
+
+        if (is_wp_error($result)) {
+            $error_msg = urlencode($result->get_error_message());
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=new&pe_error=' . $error_msg));
+        } else {
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=edit&company_id=' . $result . '&pe_notice=created'));
+        }
+        exit;
+    }
+
+    /**
+     * Traitement POST mise à jour société — déclenché via admin_post_ avant envoi des headers.
+     */
+    public function handle_post_update_company(): void {
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+
+        if (!$company_id) {
+            wp_die(esc_html__('ID de société invalide.', 'portail-entreprises'));
         }
 
         check_admin_referer('pe_save_company_' . $company_id, '_wpnonce');
@@ -141,46 +185,14 @@ class PE_Admin {
             ],
         ];
 
-        $manager = PE_Company_Manager::get_instance();
-        $result  = $manager->update_company($company_id, $data);
+        $result = PE_Company_Manager::get_instance()->update_company($company_id, $data);
 
         if ($result) {
-            add_settings_error('pe_messages', 'pe_updated', __('Entreprise mise à jour avec succès.', 'portail-entreprises'), 'updated');
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=edit&company_id=' . $company_id . '&pe_notice=updated'));
         } else {
-            add_settings_error('pe_messages', 'pe_error', __('Erreur lors de la mise à jour.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=edit&company_id=' . $company_id . '&pe_error=' . urlencode(__('Erreur lors de la mise à jour.', 'portail-entreprises'))));
         }
-    }
-
-    private function handle_company_new_form(): void {
-        if (!isset($_POST['pe_save_company']) || !isset($_POST['_wpnonce'])) {
-            return;
-        }
-
-        check_admin_referer('pe_create_company', '_wpnonce');
-
-        if (!current_user_can('manage_woocommerce')) {
-            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
-        }
-
-        $data = [
-            'name'          => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
-            'siret'         => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
-            'vat_number'    => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
-            'discount_rate' => (float) ($_POST['discount_rate'] ?? 0),
-            'credit_limit'  => (float) ($_POST['credit_limit'] ?? 0),
-            'payment_terms' => (int) ($_POST['payment_terms'] ?? 30),
-            'status'        => sanitize_key($_POST['status'] ?? 'active'),
-        ];
-
-        $manager = PE_Company_Manager::get_instance();
-        $result  = $manager->create_company($data);
-
-        if (is_wp_error($result)) {
-            add_settings_error('pe_messages', 'pe_error', $result->get_error_message(), 'error');
-        } else {
-            wp_safe_redirect(admin_url('admin.php?page=portail-b2b&action=edit&company_id=' . $result . '&created=1'));
-            exit;
-        }
+        exit;
     }
 
     public function render_settings_page(): void {
