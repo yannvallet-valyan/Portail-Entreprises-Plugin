@@ -35,22 +35,23 @@ class PE_Installer {
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-        $charset_collate = "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+        // Utiliser le charset/collation réel de l'installation WP (évite les conflits utf8mb4 vs utf8).
+        $charset_collate = $wpdb->get_charset_collate();
         $prefix = $wpdb->prefix . 'b2b_';
 
         // Table companies
-        $sql_companies = "CREATE TABLE {$prefix}companies (
+        $sql_companies = "CREATE TABLE IF NOT EXISTS {$prefix}companies (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name VARCHAR(255) NOT NULL,
             siret VARCHAR(14) NOT NULL DEFAULT '',
             vat_number VARCHAR(20) NOT NULL DEFAULT '',
-            billing_address LONGTEXT NOT NULL DEFAULT '{}',
+            billing_address LONGTEXT NULL,
             discount_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             payment_terms INT UNSIGNED NOT NULL DEFAULT 30,
             assigned_rep_id BIGINT UNSIGNED DEFAULT NULL,
             status ENUM('active','suspended') NOT NULL DEFAULT 'active',
-            modules_enabled LONGTEXT NOT NULL DEFAULT '[]',
+            modules_enabled LONGTEXT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -59,18 +60,18 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table agencies
-        $sql_agencies = "CREATE TABLE {$prefix}agencies (
+        $sql_agencies = "CREATE TABLE IF NOT EXISTS {$prefix}agencies (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             company_id BIGINT UNSIGNED NOT NULL,
             name VARCHAR(255) NOT NULL,
-            address LONGTEXT NOT NULL DEFAULT '{}',
+            address LONGTEXT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY company_id (company_id)
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table user_company
-        $sql_user_company = "CREATE TABLE {$prefix}user_company (
+        $sql_user_company = "CREATE TABLE IF NOT EXISTS {$prefix}user_company (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL,
             company_id BIGINT UNSIGNED NOT NULL,
@@ -89,7 +90,7 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table cost_centers
-        $sql_cost_centers = "CREATE TABLE {$prefix}cost_centers (
+        $sql_cost_centers = "CREATE TABLE IF NOT EXISTS {$prefix}cost_centers (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             company_id BIGINT UNSIGNED NOT NULL,
             name VARCHAR(255) NOT NULL,
@@ -100,7 +101,7 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table budget_usage
-        $sql_budget_usage = "CREATE TABLE {$prefix}budget_usage (
+        $sql_budget_usage = "CREATE TABLE IF NOT EXISTS {$prefix}budget_usage (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL,
             company_id BIGINT UNSIGNED NOT NULL,
@@ -117,13 +118,13 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table approval_rules
-        $sql_approval_rules = "CREATE TABLE {$prefix}approval_rules (
+        $sql_approval_rules = "CREATE TABLE IF NOT EXISTS {$prefix}approval_rules (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             company_id BIGINT UNSIGNED NOT NULL,
             agency_id BIGINT UNSIGNED DEFAULT NULL,
             threshold_min DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             threshold_max DECIMAL(12,2) DEFAULT NULL,
-            approver_roles LONGTEXT NOT NULL DEFAULT '[]',
+            approver_roles LONGTEXT NULL,
             delay_hours INT UNSIGNED NOT NULL DEFAULT 24,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -132,7 +133,7 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table approval_requests
-        $sql_approval_requests = "CREATE TABLE {$prefix}approval_requests (
+        $sql_approval_requests = "CREATE TABLE IF NOT EXISTS {$prefix}approval_requests (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             order_id BIGINT UNSIGNED NOT NULL,
             company_id BIGINT UNSIGNED NOT NULL,
@@ -141,7 +142,7 @@ class PE_Installer {
             status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
             amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             cost_center_id BIGINT UNSIGNED DEFAULT NULL,
-            notes TEXT DEFAULT NULL,
+            notes TEXT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -153,14 +154,14 @@ class PE_Installer {
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table audit_log
-        $sql_audit_log = "CREATE TABLE {$prefix}audit_log (
+        $sql_audit_log = "CREATE TABLE IF NOT EXISTS {$prefix}audit_log (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL,
             company_id BIGINT UNSIGNED DEFAULT NULL,
             action VARCHAR(100) NOT NULL,
             object_type VARCHAR(100) NOT NULL,
             object_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            data LONGTEXT NOT NULL DEFAULT '{}',
+            data LONGTEXT NULL,
             ip_address VARCHAR(45) NOT NULL DEFAULT '',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -171,14 +172,36 @@ class PE_Installer {
             KEY created_at (created_at)
         ) ENGINE=InnoDB {$charset_collate};";
 
-        dbDelta($sql_companies);
-        dbDelta($sql_agencies);
-        dbDelta($sql_user_company);
-        dbDelta($sql_cost_centers);
-        dbDelta($sql_budget_usage);
-        dbDelta($sql_approval_rules);
-        dbDelta($sql_approval_requests);
-        dbDelta($sql_audit_log);
+        $tables = [
+            $sql_companies,
+            $sql_agencies,
+            $sql_user_company,
+            $sql_cost_centers,
+            $sql_budget_usage,
+            $sql_approval_rules,
+            $sql_approval_requests,
+            $sql_audit_log,
+        ];
+
+        // Exécution directe (plus fiable que dbDelta pour ON UPDATE CURRENT_TIMESTAMP,
+        // ENGINE=InnoDB et les colonnes ENUM). On capture les erreurs SQL réelles.
+        $errors = [];
+        foreach ($tables as $sql) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $wpdb->query($sql);
+            if ($wpdb->last_error) {
+                $errors[] = $wpdb->last_error;
+            }
+        }
+
+        if (!empty($errors)) {
+            // Journaliser pour diagnostic sans interrompre l'activation.
+            error_log('[Portail Entreprises] Erreurs création tables : ' . implode(' | ', $errors));
+            // Ne pas marquer la version comme installée si des tables ont échoué.
+            if (!self::tables_exist()) {
+                return;
+            }
+        }
 
         self::update_db_version();
     }
