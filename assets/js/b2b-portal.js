@@ -199,88 +199,76 @@
 
         /**
          * Bloquer le bouton checkout pour les utilisateurs B2B restreints.
-         * Compatible WoodMart (les hooks PHP ne suffisent pas si WoodMart override les templates).
+         * Compatible WoodMart — remplace le contenu du conteneur .wc-proceed-to-checkout
+         * et masque le bouton checkout dans le mini-panier.
          */
         blockCheckoutIfNeeded: function () {
             if (!peB2B.checkoutBlocked) {
                 return;
             }
 
-            var self           = this;
-            var blockMsg       = peB2B.checkoutBlockMsg || '';
-            var approvalHtml   = peB2B.approvalButtonHtml || '';
+            var self         = this;
+            var blockMsg     = peB2B.checkoutBlockMsg || '';
+            var approvalHtml = peB2B.approvalButtonHtml || '';
 
-            var buildNotice = function () {
-                return $(
-                    '<div class="pe-checkout-blocked-wrap">' +
-                    '<div class="woocommerce-info pe-checkout-blocked" style="margin:12px 0;">' +
-                    '<span class="pe-checkout-blocked-icon">⛔</span> ' +
-                    self.escHtml(blockMsg) +
-                    '</div>' +
-                    approvalHtml +
-                    '</div>'
-                );
-            };
-
-            // Bouton "Passer commande" page panier + checkout (WooCommerce + WoodMart).
-            var checkoutBtnSelectors = [
-                '.checkout-button',
-                '.wc-proceed-to-checkout .button',
-                'a.checkout-button',
-                '.woodmart-proceed-to-checkout a',
-                '[name="woocommerce_checkout_place_order"]',
-                '#place_order'
-            ].join(', ');
-
-            // Bouton checkout du mini-panier.
-            var minicartBtnSelectors = [
-                '.woocommerce-mini-cart__buttons .checkout',
-                '.widget_shopping_cart_content .checkout',
-                '.woodmart-mini-cart .checkout'
-            ].join(', ');
+            // HTML injecté une seule fois — marqué avec la classe sentinelle.
+            var noticeHtml =
+                '<div class="pe-checkout-blocked-wrap">' +
+                '<p class="pe-checkout-blocked" style="color:#664d03;background:#fff3cd;border:1px solid #ffc107;' +
+                'border-left:4px solid #ffc107;border-radius:6px;padding:12px 16px;margin:12px 0;">' +
+                '<strong>⛔</strong> ' + self.escHtml(blockMsg) +
+                '</p>' +
+                approvalHtml +
+                '</div>';
 
             var doBlock = function () {
-                // Conteneurs uniques : on insère une seule notice par conteneur.
-                var seenContainers = [];
-
-                $(checkoutBtnSelectors).each(function () {
-                    var $btn = $(this);
-                    if ($btn.data('pe-blocked')) {
-                        return;
-                    }
-                    $btn.data('pe-blocked', true).hide();
-
-                    // Conteneur parent (zone des boutons) — éviter les doublons.
-                    var $container = $btn.parent();
-                    if (seenContainers.indexOf($container[0]) !== -1) {
-                        return;
-                    }
-                    if ($container.children('.pe-checkout-blocked-wrap').length) {
-                        return;
-                    }
-                    seenContainers.push($container[0]);
-                    $btn.after(buildNotice());
+                // 1. Conteneurs principal du panier : remplace l'intérieur (1 seule notice).
+                var $mainContainers = $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)');
+                $mainContainers.each(function () {
+                    $(this).html(noticeHtml);
                 });
 
-                // Mini-panier : cacher le bouton checkout, garder "Voir le panier".
-                $(minicartBtnSelectors).each(function () {
+                // 2. Boutons checkout orphelins hors conteneur principal.
+                $('a.checkout-button, .checkout-button').each(function () {
+                    var $btn = $(this);
+                    if ($btn.data('pe-blocked')) {
+                        return;
+                    }
+                    // Ignorer ceux déjà à l'intérieur d'un container traité.
+                    if ($btn.closest('.wc-proceed-to-checkout').length) {
+                        return;
+                    }
+                    $btn.data('pe-blocked', true).hide();
+                    if (!$btn.parent().find('.pe-checkout-blocked-wrap').length) {
+                        $btn.after(noticeHtml);
+                    }
+                });
+
+                // 3. Mini-panier : masquer le lien "Commander" et ajouter la notice.
+                var $minicartCheckout = $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout');
+                $minicartCheckout.each(function () {
                     var $btn = $(this);
                     if ($btn.data('pe-blocked')) {
                         return;
                     }
                     $btn.data('pe-blocked', true).hide();
-
-                    var $container = $btn.parent();
-                    if ($container.children('.pe-checkout-blocked-wrap').length) {
-                        return;
+                    if (!$btn.siblings('.pe-checkout-blocked-wrap').length) {
+                        $btn.after(noticeHtml);
                     }
-                    $btn.after(buildNotice());
                 });
             };
 
-            // Exécuter immédiatement + après mise à jour du panier (fragments WooCommerce).
+            // Exécuter immédiatement puis sur chaque rafraîchissement WC/WoodMart.
             doBlock();
-            $(document.body).on('wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout updated_wc_div', doBlock);
+            $(document.body).on(
+                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout',
+                function () {
+                    // Réinitialiser les boutons orphelins après rechargement des fragments.
+                    $('a.checkout-button, .checkout-button').removeData('pe-blocked');
+                    $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout').removeData('pe-blocked');
+                    doBlock();
+                }
+            );
         },
 
         /**

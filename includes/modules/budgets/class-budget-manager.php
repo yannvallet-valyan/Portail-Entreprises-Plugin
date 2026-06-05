@@ -25,10 +25,10 @@ class PE_Budget_Manager {
         add_action('woocommerce_checkout_process', [$this, 'validate_budget_at_checkout']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed'], 10, 1);
 
-        // Bloquer le bouton "Valider la commande" dans le panier, le checkout et le mini-panier.
-        add_action('woocommerce_proceed_to_checkout', [$this, 'maybe_block_cart_checkout_button'], 1);
-        add_filter('woocommerce_order_button_html',   [$this, 'maybe_hide_place_order_button']);
-        add_action('woocommerce_widget_shopping_cart_buttons', [$this, 'maybe_block_minicart_button'], 1);
+        // Le blocage du bouton checkout est géré côté JS (b2b-portal.js → blockCheckoutIfNeeded)
+        // pour assurer la compatibilité WoodMart qui override les templates WooCommerce.
+        // On garde uniquement le filtre checkout pour bloquer la validation serveur.
+        add_filter('woocommerce_order_button_html', [$this, 'maybe_hide_place_order_button']);
 
         // Cron mensuel de remise à zéro
         add_action('pe_reset_monthly_budgets', [$this, 'reset_monthly_usage']);

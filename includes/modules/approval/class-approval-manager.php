@@ -281,10 +281,20 @@ class PE_Approval_Manager {
         );
 
         if (false !== $result) {
-            // Met à jour le statut de la commande WooCommerce
             $order = wc_get_order((int) $request->order_id);
             if ($order) {
                 $order->update_status('processing', __('Commande approuvée par le responsable.', 'portail-entreprises'));
+
+                // Envoyer l'email WooCommerce "Commande en cours de traitement" au client.
+                $wc_emails = WC()->mailer()->get_emails();
+                if (isset($wc_emails['WC_Email_Customer_Processing_Order'])) {
+                    $wc_emails['WC_Email_Customer_Processing_Order']->trigger((int) $request->order_id, $order);
+                }
+
+                // Notifier aussi les admins WP de la commande approuvée.
+                if (isset($wc_emails['WC_Email_New_Order'])) {
+                    $wc_emails['WC_Email_New_Order']->trigger((int) $request->order_id, $order);
+                }
             }
 
             PE_Audit_Log::get_instance()->log(
@@ -456,11 +466,15 @@ class PE_Approval_Manager {
     }
 
     /**
-     * Notifie les approbateurs d'une nouvelle demande.
+     * Notifie les approbateurs B2B + l'admin WP/shop_manager d'une nouvelle demande.
      */
     private function notify_approvers(int $request_id, int $company_id, float $amount, int $order_id): void {
         global $wpdb;
 
+        $approval_url = wc_get_account_endpoint_url('b2b-approvals');
+        $admin_order_url = admin_url('post.php?post=' . $order_id . '&action=edit');
+
+        // Approbateurs B2B de l'entreprise.
         $approvers = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT u.user_email, u.display_name
@@ -469,26 +483,39 @@ class PE_Approval_Manager {
                  WHERE uc.company_id = %d AND uc.role IN ('company_admin', 'purchase_manager')",
                 $company_id
             )
-        );
-
-        $approval_url = add_query_arg(
-            ['section' => 'approvals'],
-            wc_get_account_endpoint_url('b2b-approvals')
-        );
+        ) ?: [];
 
         foreach ($approvers as $approver) {
             wp_mail(
                 $approver->user_email,
-                __('Nouvelle demande d\'approbation', 'portail-entreprises'),
+                sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
                 sprintf(
-                    /* translators: 1: name, 2: amount, 3: order ID, 4: URL */
-                    __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\nMontant : %2\$s\nCommande n° : %3\$d\n\nPour approuver ou rejeter cette demande, connectez-vous à votre espace :\n%4\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                    __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\nMontant : %2\$s\nCommande n° : %3\$d\n\nApprouver ou rejeter :\n%4\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
                     esc_html($approver->display_name),
-                    wc_price($amount),
+                    html_entity_decode(strip_tags(wc_price($amount))),
                     $order_id,
                     esc_url($approval_url)
                 )
             );
+        }
+
+        // Administrateurs WP et gestionnaires de boutique — notification via email WooCommerce.
+        $this->send_new_order_admin_email($order_id);
+    }
+
+    /**
+     * Envoie l'email WooCommerce "Nouvelle commande" aux admins/shop_managers.
+     */
+    private function send_new_order_admin_email(int $order_id): void {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        // Utilise le système d'email WooCommerce natif.
+        $wc_emails = WC()->mailer()->get_emails();
+        if (isset($wc_emails['WC_Email_New_Order'])) {
+            $wc_emails['WC_Email_New_Order']->trigger($order_id, $order);
         }
     }
 
