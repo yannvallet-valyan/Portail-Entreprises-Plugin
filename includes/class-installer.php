@@ -7,8 +7,25 @@ defined('ABSPATH') || exit;
 
 class PE_Installer {
 
+    /**
+     * Vérifie si les tables existent réellement en base.
+     */
+    public static function tables_exist(): bool {
+        global $wpdb;
+        $table = $wpdb->get_var(
+            $wpdb->prepare("SHOW TABLES LIKE %s", $wpdb->prefix . 'b2b_companies')
+        );
+        return !empty($table);
+    }
+
     public static function install(): void {
         global $wpdb;
+
+        // Toujours créer si les tables n'existent pas, peu importe la version stockée.
+        if (!self::tables_exist()) {
+            // Forcer la réinstallation.
+            delete_option('pe_db_version');
+        }
 
         $current_version = self::get_db_version();
 

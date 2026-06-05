@@ -39,19 +39,30 @@ class PE_Company_Manager {
             'discount_rate'   => (float) ($data['discount_rate'] ?? 0),
             'credit_limit'    => (float) ($data['credit_limit'] ?? 0),
             'payment_terms'   => (int) ($data['payment_terms'] ?? 30),
-            'assigned_rep_id' => !empty($data['assigned_rep_id']) ? (int) $data['assigned_rep_id'] : null,
             'status'          => in_array($data['status'] ?? 'active', ['active', 'suspended'], true) ? $data['status'] : 'active',
             'modules_enabled' => wp_json_encode($data['modules_enabled'] ?? []),
         ];
+        $formats = ['%s', '%s', '%s', '%s', '%f', '%f', '%d', '%s', '%s'];
+
+        // assigned_rep_id est nullable — on l'insère seulement si fourni pour éviter NULL+%d.
+        if (!empty($data['assigned_rep_id'])) {
+            $insert_data['assigned_rep_id'] = (int) $data['assigned_rep_id'];
+            $formats[]                       = '%d';
+        }
 
         $result = $wpdb->insert(
             $wpdb->prefix . 'b2b_companies',
             $insert_data,
-            ['%s', '%s', '%s', '%s', '%f', '%f', '%d', '%d', '%s', '%s']
+            $formats
         );
 
         if (false === $result) {
-            return new \WP_Error('db_error', __('Erreur lors de la création de l\'entreprise.', 'portail-entreprises'));
+            $db_error = $wpdb->last_error ?: __('Erreur inconnue.', 'portail-entreprises');
+            return new \WP_Error('db_error', sprintf(
+                /* translators: %s: database error message */
+                __('Erreur lors de la création de l\'entreprise : %s', 'portail-entreprises'),
+                $db_error
+            ));
         }
 
         $company_id = (int) $wpdb->insert_id;

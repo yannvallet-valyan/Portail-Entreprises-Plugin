@@ -52,6 +52,7 @@ add_action('plugins_loaded', function () {
     }
 
     require_once PE_PATH . 'includes/class-installer.php';
+    PE_Installer::install(); // S'assure que les tables existent (idempotent via version check).
     require_once PE_PATH . 'includes/class-permissions.php';
     require_once PE_PATH . 'includes/modules/audit/class-audit-log.php';
     require_once PE_PATH . 'includes/modules/companies/class-company-manager.php';
