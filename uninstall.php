@@ -1,14 +1,29 @@
 <?php
 /**
- * Uninstall script — supprime toutes les données du plugin.
+ * Uninstall script.
+ *
+ * Par défaut, les données sont CONSERVÉES lors de la suppression du plugin afin
+ * de pouvoir réinstaller sans tout perdre (sociétés, utilisateurs, budgets…).
+ *
+ * Pour supprimer définitivement toutes les données, activez l'option
+ * « Supprimer toutes les données à la désinstallation » dans
+ * Portail B2B → Paramètres avant de supprimer le plugin.
  */
 
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
 global $wpdb;
 
+$settings = get_option('pe_settings', []);
+
+// Sécurité : ne rien supprimer sauf si l'utilisateur l'a explicitement demandé.
+if (empty($settings['delete_data_on_uninstall'])) {
+    return;
+}
+
 $tables = [
     $wpdb->prefix . 'b2b_audit_log',
+    $wpdb->prefix . 'b2b_approval_tokens',
     $wpdb->prefix . 'b2b_approval_requests',
     $wpdb->prefix . 'b2b_approval_rules',
     $wpdb->prefix . 'b2b_budget_usage',
@@ -26,6 +41,8 @@ foreach ($tables as $table) {
 // Supprime les options
 delete_option('pe_db_version');
 delete_option('pe_settings');
+delete_option('pe_rewrite_version');
+delete_option('pe_flush_rewrite_rules');
 
 // Supprime les user meta
 $wpdb->query("DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ('b2b_enabled', 'b2b_role', 'b2b_company_id')");

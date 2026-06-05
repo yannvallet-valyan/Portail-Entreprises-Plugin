@@ -226,6 +226,7 @@ class PE_Admin {
                 'magic_link_enabled'               => isset($_POST['magic_link_enabled']) ? 1 : 0,
                 'magic_link_validity'              => $ml_validity,
                 'magic_link_validity_custom_hours' => max(1, (int) ($_POST['magic_link_validity_custom_hours'] ?? 168)),
+                'delete_data_on_uninstall'         => isset($_POST['delete_data_on_uninstall']) ? 1 : 0,
             ];
 
             update_option('pe_settings', $settings);
@@ -291,6 +292,19 @@ class PE_Admin {
                                 document.getElementById('pe-ml-custom-wrap').style.display = this.value === 'custom' ? '' : 'none';
                             });
                             </script>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Suppression des données', 'portail-entreprises'); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="delete_data_on_uninstall"
+                                       value="1" <?php checked($settings['delete_data_on_uninstall'] ?? 0, 1); ?> />
+                                <?php esc_html_e('Supprimer toutes les données à la désinstallation du plugin', 'portail-entreprises'); ?>
+                            </label>
+                            <p class="description" style="color:#b32d2e;">
+                                <?php esc_html_e('⚠️ Si cette case est DÉCOCHÉE (recommandé), vos sociétés, utilisateurs, budgets et historiques sont CONSERVÉS même si vous supprimez le plugin. Vous pourrez le réinstaller sans rien perdre. Ne cochez cette case que si vous voulez tout effacer définitivement.', 'portail-entreprises'); ?>
+                            </p>
                         </td>
                     </tr>
                 </table>
