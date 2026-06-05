@@ -439,13 +439,23 @@ class PE_Approval_Manager {
     }
 
     /**
-     * Hook checkout : bloque le checkout si une approbation est requise.
-     * La vérification est déjà faite dans PE_Budget_Manager::validate_budget_at_checkout() ;
-     * cette méthode est conservée pour rétro-compatibilité.
+     * Hook checkout : bloque le checkout pour les requester et déclenche les demandes d'approbation.
      */
     public function handle_checkout_approval(): void {
-        // Le blocage effectif (notice 'error') est géré dans validate_budget_at_checkout()
-        // pour centraliser la logique et éviter les doublons de notices.
+        $user_id = get_current_user_id();
+
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return;
+        }
+
+        $role = PE_Permissions::get_user_b2b_role($user_id);
+
+        if ('requester' === $role) {
+            wc_add_notice(
+                __('En tant que demandeur, votre panier sera soumis à validation. Vous recevrez une notification lorsque votre commande sera approuvée.', 'portail-entreprises'),
+                'notice'
+            );
+        }
     }
 
     /**
