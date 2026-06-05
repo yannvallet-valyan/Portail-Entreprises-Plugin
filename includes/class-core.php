@@ -63,6 +63,9 @@ class PE_Core {
         add_filter('woocommerce_get_order_item_totals', [$this, 'add_b2b_order_totals_rows'], 10, 3);
         add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'display_b2b_order_meta_admin']);
 
+        // AJAX : édition de centre de coût + référence par les managers.
+        add_action('wp_ajax_pe_update_order_b2b_meta', [$this, 'ajax_update_order_b2b_meta']);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -282,6 +285,12 @@ class PE_Core {
             return $fields;
         }
 
+        // Les requester ne peuvent pas passer en checkout — leurs champs sont dans le
+        // formulaire "Demander une approbation", ne pas les dupliquer ici.
+        if ('requester' === PE_Permissions::get_user_b2b_role($user_id)) {
+            return $fields;
+        }
+
         $company = PE_Permissions::get_user_company($user_id);
         if (!$company) {
             return $fields;
@@ -316,7 +325,7 @@ class PE_Core {
             ];
         }
 
-        // Référence personnelle (toujours disponible pour les utilisateurs B2B).
+        // Référence personnelle.
         $fields['order']['b2b_personal_reference'] = [
             'type'        => 'text',
             'label'       => __('Votre référence', 'portail-entreprises'),
@@ -411,5 +420,114 @@ class PE_Core {
             echo '<p><strong>' . esc_html__('Référence client :', 'portail-entreprises') . '</strong> ' . esc_html($reference) . '</p>';
         }
         echo '</div>';
+    }
+
+    /**
+     * AJAX : met à jour le centre de coût et la référence sur une commande.
+     * Réservé aux company_admin et purchase_manager.
+     */
+    public function ajax_update_order_b2b_meta(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        $user_id  = get_current_user_id();
+        $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+
+        if (!$user_id || !$order_id) {
+            wp_send_json_error(['message' => __('Paramètres invalides.', 'portail-entreprises')]);
+        }
+
+        $role = PE_Permissions::get_user_b2b_role($user_id);
+        if (!in_array($role, ['company_admin', 'purchase_manager'], true)) {
+            wp_send_json_error(['message' => __('Permission refusée.', 'portail-entreprises')]);
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wp_send_json_error(['message' => __('Commande introuvable.', 'portail-entreprises')]);
+        }
+
+        // Vérifier que la commande appartient à l'entreprise du manager.
+        $company    = PE_Permissions::get_user_company($user_id);
+        $order_user = (int) $order->get_customer_id();
+        if (!$company || !PE_Permissions::user_belongs_to_company($order_user, (int) $company->id)) {
+            wp_send_json_error(['message' => __('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises')]);
+        }
+
+        $reference      = isset($_POST['reference']) ? sanitize_text_field(wp_unslash($_POST['reference'])) : '';
+        $cost_center_id = isset($_POST['cost_center_id']) ? absint($_POST['cost_center_id']) : 0;
+
+        $order->update_meta_data('_b2b_personal_reference', $reference);
+
+        if ($cost_center_id > 0) {
+            global $wpdb;
+            $cc = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE id = %d AND company_id = %d LIMIT 1",
+                    $cost_center_id,
+                    (int) $company->id
+                )
+            );
+            if ($cc) {
+                $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
+                $order->update_meta_data('_b2b_cost_center_id', $cost_center_id);
+                $order->update_meta_data('_b2b_cost_center_label', $label);
+            }
+        } else {
+            $order->delete_meta_data('_b2b_cost_center_id');
+            $order->delete_meta_data('_b2b_cost_center_label');
+        }
+
+        $order->save();
+
+        // Mettre à jour aussi la demande d'approbation si elle existe.
+        global $wpdb;
+        if ($cost_center_id > 0) {
+            $wpdb->update(
+                $wpdb->prefix . 'b2b_approval_requests',
+                ['cost_center_id' => $cost_center_id, 'updated_at' => current_time('mysql')],
+                ['order_id' => $order_id],
+                ['%d', '%s'],
+                ['%d']
+            );
+        }
+
+        wp_send_json_success(['message' => __('Informations mises à jour.', 'portail-entreprises')]);
+    }
+
+    /**
+     * Retourne les commandes WooCommerce de tous les membres d'une entreprise.
+     */
+    public static function get_company_orders(int $company_id, int $limit = 50): array {
+        global $wpdb;
+
+        $user_ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+                $company_id
+            )
+        );
+
+        if (empty($user_ids)) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($user_ids), '%d'));
+        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT p.ID, p.post_status, p.post_date, pm_customer.meta_value AS customer_id
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm_customer ON pm_customer.post_id = p.ID AND pm_customer.meta_key = '_customer_user'
+                 WHERE p.post_type = 'shop_order'
+                   AND CAST(pm_customer.meta_value AS UNSIGNED) IN ($placeholders)
+                 ORDER BY p.post_date DESC
+                 LIMIT %d",
+                ...array_merge(array_map('intval', $user_ids), [$limit])
+            )
+        );
+
+        $order_ids = array_column($rows ?: [], 'ID');
+
+        return array_filter(array_map('wc_get_order', $order_ids));
     }
 }

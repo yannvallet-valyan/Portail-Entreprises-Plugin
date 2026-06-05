@@ -18,6 +18,7 @@
             this.bindRemoveUserActions();
             this.bindCostCenterActions();
             this.bindAdminActions();
+            this.bindEditMetaActions();
             this.bindModalClose();
             this.animateProgressBars();
             this.blockCheckoutIfNeeded();
@@ -431,6 +432,79 @@
                     error: function () {
                         self.showFeedback('error', peB2B.i18n.error);
                         self.resetButton($btn);
+                    }
+                });
+            });
+        },
+
+        /**
+         * Édition inline du centre de coût et de la référence (managers).
+         */
+        bindEditMetaActions: function () {
+            var self = this;
+
+            $(document).on('click', '.pe-edit-meta-btn', function () {
+                var $btn      = $(this);
+                var orderId   = $btn.data('order-id');
+                var ccId      = $btn.data('cc-id') || 0;
+                var reference = $btn.data('reference') || '';
+                var $modal    = $('#pe-edit-meta-modal');
+
+                if (!$modal.length) {
+                    return;
+                }
+
+                $modal.data('order-id', orderId);
+                $('#pe-edit-cc').val(ccId);
+                $('#pe-edit-ref').val(reference);
+                $modal.show();
+                $('#pe-edit-ref').focus();
+            });
+
+            $(document).on('click', '#pe-save-meta', function () {
+                var $btn    = $(this);
+                var $modal  = $('#pe-edit-meta-modal');
+                var orderId = $modal.data('order-id');
+                var ccId    = $('#pe-edit-cc').val() || 0;
+                var ref     = $('#pe-edit-ref').val().trim();
+                var nonce   = $btn.data('nonce');
+
+                self.setButtonLoading($btn);
+
+                $.ajax({
+                    url:    peB2B.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action:         'pe_update_order_b2b_meta',
+                        nonce:          nonce,
+                        order_id:       orderId,
+                        cost_center_id: ccId,
+                        reference:      ref
+                    },
+                    success: function (response) {
+                        self.resetButton($btn);
+                        $modal.hide();
+                        if (response.success) {
+                            // Mettre à jour l'affichage dans le tableau sans rechargement.
+                            var $ccCell  = $('.pe-cc-cell[data-order-id="' + orderId + '"]');
+                            var $refCell = $('.pe-ref-cell[data-order-id="' + orderId + '"]');
+                            var $editBtn = $ccCell.find('.pe-edit-meta-btn');
+
+                            $ccCell.find('.pe-cc-display').html(
+                                $('#pe-edit-cc option:selected').text().trim() || '<em>—</em>'
+                            );
+                            $refCell.find('.pe-ref-display').html(ref || '<em>—</em>');
+                            $editBtn.data('cc-id', ccId).data('reference', ref);
+
+                            self.showFeedback('success', response.data.message);
+                        } else {
+                            self.showFeedback('error', response.data.message || peB2B.i18n.error);
+                        }
+                    },
+                    error: function () {
+                        self.resetButton($btn);
+                        $modal.hide();
+                        self.showFeedback('error', peB2B.i18n.error);
                     }
                 });
             });

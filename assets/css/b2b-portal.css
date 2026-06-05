@@ -811,3 +811,23 @@
 .pe-request-approval-btn:hover {
     background: var(--pe-blue-hover) !important;
 }
+
+/* Bouton-lien édition inline */
+.pe-btn-link {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 0.875rem;
+    opacity: 0.6;
+    vertical-align: middle;
+}
+.pe-btn-link:hover { opacity: 1; }
+
+/* Statuts de commande dans tableau entreprise */
+.pe-order-status { font-size: 0.8125rem; font-weight: 600; }
+.pe-order-status-processing { color: #2e7d32; }
+.pe-order-status-completed  { color: #1565c0; }
+.pe-order-status-cancelled  { color: #b71c1c; }
+.pe-order-status-pending, .pe-order-status-pending-payment { color: #e65100; }
+.pe-order-status-pending-approval { color: #6a1b9a; }
