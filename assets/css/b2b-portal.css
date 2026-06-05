@@ -1,0 +1,752 @@
+/**
+ * Portail Entreprises B2B — Feuille de style principale
+ * Schéma couleurs : navy foncé #1a2744, bleu #2d6ebd
+ */
+
+/* =========================================================
+   Variables CSS
+   ========================================================= */
+:root {
+    --pe-navy:          #1a2744;
+    --pe-navy-light:    #243358;
+    --pe-blue:          #2d6ebd;
+    --pe-blue-hover:    #2560a8;
+    --pe-blue-light:    #e8f0fb;
+    --pe-green:         #28a745;
+    --pe-green-light:   #d4edda;
+    --pe-orange:        #fd7e14;
+    --pe-orange-light:  #fff3cd;
+    --pe-red:           #dc3545;
+    --pe-red-light:     #f8d7da;
+    --pe-gray:          #6c757d;
+    --pe-gray-light:    #f8f9fa;
+    --pe-border:        #dee2e6;
+    --pe-text:          #333;
+    --pe-text-light:    #666;
+    --pe-white:         #ffffff;
+    --pe-radius:        8px;
+    --pe-radius-sm:     4px;
+    --pe-shadow:        0 2px 8px rgba(26, 39, 68, 0.1);
+    --pe-shadow-hover:  0 4px 16px rgba(26, 39, 68, 0.15);
+    --pe-transition:    all 0.2s ease;
+}
+
+/* =========================================================
+   Layout général
+   ========================================================= */
+.pe-dashboard,
+.pe-company-page,
+.pe-users-page,
+.pe-budgets-page,
+.pe-approvals-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    color: var(--pe-text);
+    max-width: 100%;
+}
+
+.pe-section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--pe-navy);
+    margin: 0 0 24px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid var(--pe-blue);
+}
+
+.pe-section-subtitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--pe-navy);
+    margin: 24px 0 12px;
+}
+
+.pe-section {
+    margin-top: 32px;
+}
+
+/* =========================================================
+   Cards
+   ========================================================= */
+.pe-card {
+    background: var(--pe-white);
+    border: 1px solid var(--pe-border);
+    border-radius: var(--pe-radius);
+    box-shadow: var(--pe-shadow);
+    overflow: hidden;
+    transition: var(--pe-transition);
+}
+
+.pe-card:hover {
+    box-shadow: var(--pe-shadow-hover);
+}
+
+.pe-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--pe-navy);
+    color: var(--pe-white);
+}
+
+.pe-card-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--pe-white);
+}
+
+.pe-card-body {
+    padding: 20px;
+}
+
+.pe-card-icon {
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.pe-card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--pe-text);
+    margin: 0 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pe-card-meta {
+    color: var(--pe-text-light);
+    font-size: 0.875rem;
+    margin: 4px 0 0;
+}
+
+.pe-card-sub {
+    color: var(--pe-green);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    margin: 4px 0 0;
+}
+
+.pe-card-link {
+    display: inline-block;
+    color: var(--pe-blue);
+    font-size: 0.875rem;
+    text-decoration: none;
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+.pe-card-link:hover {
+    text-decoration: underline;
+    color: var(--pe-blue-hover);
+}
+
+.pe-card-alert {
+    border-color: var(--pe-orange);
+}
+
+.pe-card-alert .pe-card-header {
+    background: var(--pe-orange);
+}
+
+/* =========================================================
+   Dashboard — grille de cards
+   ========================================================= */
+.pe-dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.pe-dashboard-cards .pe-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.pe-dashboard-cards .pe-card .pe-card-body {
+    flex: 1;
+}
+
+.pe-stat-number {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--pe-navy);
+    line-height: 1;
+    margin: 8px 0;
+}
+
+/* =========================================================
+   Progress bars
+   ========================================================= */
+.pe-progress-bar-container {
+    background: var(--pe-gray-light);
+    border-radius: 999px;
+    height: 10px;
+    overflow: hidden;
+    margin: 8px 0;
+    border: 1px solid var(--pe-border);
+}
+
+.pe-progress-bar {
+    height: 100%;
+    background: var(--pe-blue);
+    border-radius: 999px;
+    transition: width 0.6s ease;
+}
+
+.pe-progress-bar.pe-progress-warning {
+    background: var(--pe-orange);
+}
+
+.pe-progress-bar.pe-progress-danger {
+    background: var(--pe-red);
+}
+
+.pe-mini-progress {
+    width: 80px;
+    height: 6px;
+    background: var(--pe-gray-light);
+    border-radius: 999px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 6px;
+}
+
+.pe-mini-progress-bar {
+    height: 100%;
+    background: var(--pe-blue);
+    border-radius: 999px;
+}
+
+.pe-mini-progress-bar.pe-progress-warning { background: var(--pe-orange); }
+.pe-mini-progress-bar.pe-progress-danger  { background: var(--pe-red); }
+
+/* =========================================================
+   Budget overview
+   ========================================================= */
+.pe-budget-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.pe-budget-block {
+    padding: 16px;
+    background: var(--pe-gray-light);
+    border-radius: var(--pe-radius-sm);
+    border: 1px solid var(--pe-border);
+}
+
+.pe-budget-block h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--pe-navy);
+    margin: 0 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pe-budget-figures {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 0.9375rem;
+}
+
+.pe-budget-figures .pe-spent { font-weight: 700; color: var(--pe-navy); }
+.pe-budget-figures .pe-separator { color: var(--pe-gray); }
+.pe-budget-figures .pe-limit { color: var(--pe-text-light); }
+.pe-budget-figures .pe-percent { font-size: 0.8125rem; color: var(--pe-gray); }
+
+.pe-remaining { color: var(--pe-green); font-weight: 500; font-size: 0.875rem; margin-top: 4px; }
+.pe-unlimited { color: var(--pe-gray); font-style: italic; }
+.pe-spent-info { font-size: 0.875rem; color: var(--pe-text-light); margin-top: 4px; }
+.pe-limit-value { font-size: 1.5rem; font-weight: 700; color: var(--pe-navy); margin: 0; }
+
+.pe-budget-cell { display: flex; align-items: center; gap: 6px; }
+
+/* =========================================================
+   Badges / statuts
+   ========================================================= */
+.pe-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.pe-badge-active    { background: var(--pe-green-light); color: var(--pe-green); }
+.pe-badge-suspended { background: var(--pe-red-light); color: var(--pe-red); }
+.pe-badge-pending   { background: var(--pe-orange-light); color: var(--pe-orange); }
+.pe-badge-default   { background: var(--pe-gray-light); color: var(--pe-gray); }
+.pe-badge-info      { background: var(--pe-blue-light); color: var(--pe-blue); }
+.pe-badge-neutral   { background: var(--pe-blue-light); color: var(--pe-navy); }
+
+/* Rôles */
+.pe-role-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--pe-radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.pe-role-company_admin    { background: #e3e8f7; color: var(--pe-navy); }
+.pe-role-purchase_manager { background: #dbeafe; color: #1d4ed8; }
+.pe-role-buyer            { background: #d1fae5; color: #065f46; }
+.pe-role-requester        { background: #fef3c7; color: #92400e; }
+.pe-role-accountant       { background: #ede9fe; color: #5b21b6; }
+
+/* =========================================================
+   Tableaux
+   ========================================================= */
+.pe-table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.pe-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.pe-table th {
+    background: var(--pe-navy);
+    color: var(--pe-white);
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.pe-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--pe-border);
+    color: var(--pe-text);
+    vertical-align: middle;
+}
+
+.pe-table tbody tr:hover {
+    background: var(--pe-blue-light);
+}
+
+.pe-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.pe-table a {
+    color: var(--pe-blue);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.pe-table a:hover {
+    text-decoration: underline;
+}
+
+.pe-current-user {
+    background: var(--pe-blue-light) !important;
+}
+
+.pe-actions-cell {
+    white-space: nowrap;
+}
+
+.pe-text-muted {
+    color: var(--pe-gray);
+    font-size: 0.8125rem;
+    display: block;
+    margin-top: 2px;
+}
+
+/* =========================================================
+   Boutons
+   ========================================================= */
+.pe-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border: none;
+    border-radius: var(--pe-radius-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: var(--pe-transition);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.pe-btn:focus { outline: 2px solid var(--pe-blue); outline-offset: 2px; }
+
+.pe-btn-primary   { background: var(--pe-blue); color: var(--pe-white); }
+.pe-btn-primary:hover { background: var(--pe-blue-hover); color: var(--pe-white); }
+
+.pe-btn-secondary { background: var(--pe-gray-light); color: var(--pe-text); border: 1px solid var(--pe-border); }
+.pe-btn-secondary:hover { background: var(--pe-border); }
+
+.pe-btn-success { background: var(--pe-green); color: var(--pe-white); }
+.pe-btn-success:hover { background: #218838; color: var(--pe-white); }
+
+.pe-btn-danger { background: var(--pe-red); color: var(--pe-white); }
+.pe-btn-danger:hover { background: #c82333; color: var(--pe-white); }
+
+.pe-btn-sm { padding: 5px 12px; font-size: 0.8125rem; }
+
+/* =========================================================
+   Formulaires
+   ========================================================= */
+.pe-form .pe-form-row {
+    margin-bottom: 16px;
+}
+
+.pe-form .pe-form-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--pe-navy);
+    font-size: 0.875rem;
+}
+
+.pe-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.pe-form-row-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 12px;
+}
+
+.pe-input, .pe-select, .pe-textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--pe-border);
+    border-radius: var(--pe-radius-sm);
+    font-size: 0.9rem;
+    color: var(--pe-text);
+    background: var(--pe-white);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+
+.pe-input:focus, .pe-select:focus, .pe-textarea:focus {
+    outline: none;
+    border-color: var(--pe-blue);
+    box-shadow: 0 0 0 3px rgba(45, 110, 189, 0.15);
+}
+
+.pe-input-sm { width: 100px; padding: 6px 8px; font-size: 0.8125rem; }
+
+.pe-textarea { resize: vertical; }
+
+.pe-form-actions {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--pe-border);
+}
+
+/* =========================================================
+   Filters
+   ========================================================= */
+.pe-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.pe-filter-btn {
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--pe-text);
+    background: var(--pe-gray-light);
+    border: 1px solid var(--pe-border);
+    transition: var(--pe-transition);
+}
+
+.pe-filter-btn:hover,
+.pe-filter-btn.active {
+    background: var(--pe-navy);
+    color: var(--pe-white);
+    border-color: var(--pe-navy);
+}
+
+/* =========================================================
+   Approbations — infos rejet
+   ========================================================= */
+.pe-rejection-note {
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: var(--pe-red-light);
+    border-radius: var(--pe-radius-sm);
+    font-size: 0.8rem;
+    color: var(--pe-red);
+}
+
+/* =========================================================
+   Modal
+   ========================================================= */
+.pe-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pe-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(26, 39, 68, 0.6);
+    backdrop-filter: blur(2px);
+}
+
+.pe-modal-content {
+    position: relative;
+    z-index: 1;
+    background: var(--pe-white);
+    border-radius: var(--pe-radius);
+    box-shadow: var(--pe-shadow-hover);
+    padding: 28px;
+    width: min(480px, 90vw);
+}
+
+.pe-modal-content h3 {
+    margin: 0 0 16px;
+    color: var(--pe-navy);
+    font-size: 1.125rem;
+}
+
+.pe-modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+/* =========================================================
+   Adresse
+   ========================================================= */
+.pe-address {
+    font-style: normal;
+    line-height: 1.8;
+    color: var(--pe-text);
+}
+
+/* =========================================================
+   Agences
+   ========================================================= */
+.pe-agencies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.pe-agency-card {
+    padding: 16px;
+    border: 1px solid var(--pe-border);
+    border-radius: var(--pe-radius-sm);
+    background: var(--pe-gray-light);
+}
+
+.pe-agency-card h4 {
+    margin: 0 0 8px;
+    color: var(--pe-navy);
+    font-size: 0.9375rem;
+}
+
+.pe-agency-card address {
+    font-style: normal;
+    font-size: 0.875rem;
+    color: var(--pe-text-light);
+}
+
+/* =========================================================
+   Période / Labels
+   ========================================================= */
+.pe-period-label {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: auto;
+}
+
+/* =========================================================
+   Info grid (fiche entreprise)
+   ========================================================= */
+.pe-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.pe-info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pe-info-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--pe-gray);
+}
+
+.pe-info-value {
+    font-size: 0.9375rem;
+    color: var(--pe-navy);
+    font-weight: 500;
+}
+
+/* =========================================================
+   AJAX feedback
+   ========================================================= */
+.pe-ajax-message {
+    padding: 12px 16px;
+    border-radius: var(--pe-radius-sm);
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.pe-ajax-message.success {
+    background: var(--pe-green-light);
+    color: var(--pe-green);
+    border: 1px solid var(--pe-green);
+}
+
+.pe-ajax-message.error {
+    background: var(--pe-red-light);
+    color: var(--pe-red);
+    border: 1px solid var(--pe-red);
+}
+
+/* =========================================================
+   Empty state
+   ========================================================= */
+.pe-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--pe-gray);
+}
+
+/* =========================================================
+   Admin — wrapping
+   ========================================================= */
+.pe-admin-wrap .pe-form-card {
+    background: var(--pe-white);
+    border: 1px solid var(--pe-border);
+    border-radius: var(--pe-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--pe-shadow);
+}
+
+.pe-admin-wrap .pe-form-card h2,
+.pe-admin-wrap .pe-form-card h3 {
+    color: var(--pe-navy);
+    border-bottom: 2px solid var(--pe-blue-light);
+    padding-bottom: 8px;
+    margin-top: 0;
+}
+
+.pe-admin-wrap .pe-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.pe-admin-wrap .pe-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.pe-user-b2b-section {
+    background: var(--pe-blue-light);
+    border: 1px solid #c0d4f0;
+    border-radius: var(--pe-radius);
+    padding: 20px;
+}
+
+.pe-user-b2b-section h2 {
+    color: var(--pe-navy);
+    font-size: 1.25rem;
+    margin-top: 0;
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media (max-width: 768px) {
+    .pe-dashboard-cards {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .pe-form-grid,
+    .pe-form-row-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pe-budget-overview {
+        grid-template-columns: 1fr;
+    }
+
+    .pe-info-grid,
+    .pe-agencies-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pe-table th,
+    .pe-table td {
+        padding: 8px 10px;
+        font-size: 0.8125rem;
+    }
+
+    .pe-stat-number {
+        font-size: 2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .pe-dashboard-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .pe-modal-content {
+        padding: 20px;
+    }
+
+    .pe-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .pe-filters {
+        gap: 6px;
+    }
+}
