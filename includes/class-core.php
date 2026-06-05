@@ -76,10 +76,16 @@ class PE_Core {
 
     public function register_endpoints(): void {
         add_rewrite_endpoint('b2b-dashboard', EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-company', EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-users', EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('b2b-budgets', EP_ROOT | EP_PAGES);
+        add_rewrite_endpoint('b2b-company',   EP_ROOT | EP_PAGES);
+        add_rewrite_endpoint('b2b-users',     EP_ROOT | EP_PAGES);
+        add_rewrite_endpoint('b2b-budgets',   EP_ROOT | EP_PAGES);
         add_rewrite_endpoint('b2b-approvals', EP_ROOT | EP_PAGES);
+
+        // Flush différé : si le flag d'activation est présent, flusher une seule fois.
+        if (get_option('pe_flush_rewrite_rules')) {
+            flush_rewrite_rules();
+            delete_option('pe_flush_rewrite_rules');
+        }
     }
 
     public function add_b2b_menu_items(array $items): array {

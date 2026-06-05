@@ -34,10 +34,23 @@ add_action('before_woocommerce_init', function () {
 register_activation_hook(__FILE__, function () {
     require_once PE_PATH . 'includes/class-installer.php';
     PE_Installer::install();
+
+    // Enregistrer les endpoints et flusher les rewrite rules.
+    add_rewrite_endpoint('b2b-dashboard', EP_ROOT | EP_PAGES);
+    add_rewrite_endpoint('b2b-company',   EP_ROOT | EP_PAGES);
+    add_rewrite_endpoint('b2b-users',     EP_ROOT | EP_PAGES);
+    add_rewrite_endpoint('b2b-budgets',   EP_ROOT | EP_PAGES);
+    add_rewrite_endpoint('b2b-approvals', EP_ROOT | EP_PAGES);
+    flush_rewrite_rules();
+
+    // Flag pour flush différé si activation sans request (CLI, etc.)
+    update_option('pe_flush_rewrite_rules', 1);
 });
 
 register_deactivation_hook(__FILE__, function () {
+    // Nettoyer les endpoints et flusher.
     flush_rewrite_rules();
+    delete_option('pe_flush_rewrite_rules');
 });
 
 // Bootstrap plugin
