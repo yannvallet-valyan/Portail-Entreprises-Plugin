@@ -33,14 +33,32 @@ if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
     $user_count       = count($company_users);
 }
 
-// Orders: own orders + approval-workflow orders for this user
-$recent_orders = wc_get_orders([
-    'customer_id' => $user_id,
-    'limit'       => 10,
-    'orderby'     => 'date',
-    'order'       => 'DESC',
-    'status'      => ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'],
-]);
+// Orders: for admins/managers show all company orders; for requesters show own only
+if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
+    global $wpdb;
+    $company_user_ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+        (int) $company->id
+    ));
+    if (empty($company_user_ids)) {
+        $company_user_ids = [$user_id];
+    }
+    $recent_orders = wc_get_orders([
+        'customer_id' => array_map('intval', $company_user_ids),
+        'limit'       => 10,
+        'orderby'     => 'date',
+        'order'       => 'DESC',
+        'status'      => ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'],
+    ]);
+} else {
+    $recent_orders = wc_get_orders([
+        'customer_id' => $user_id,
+        'limit'       => 10,
+        'orderby'     => 'date',
+        'order'       => 'DESC',
+        'status'      => ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'],
+    ]);
+}
 
 $status_labels = wc_get_order_statuses();
 ?>
@@ -101,11 +119,16 @@ $status_labels = wc_get_order_statuses();
         </div>
         <?php endif; ?>
 
-        <?php if ($company_budget && ($company_budget['budget_monthly'] !== null || $company_budget['budget_annual'] !== null)) : ?>
+        <?php if ($company_budget !== null) : ?>
         <div class="pe-card pe-card-budget">
             <div class="pe-card-icon">🏭</div>
             <div class="pe-card-body">
                 <h3 class="pe-card-title"><?php esc_html_e('Budget entreprise', 'portail-entreprises'); ?></h3>
+                <?php if ($company_budget['budget_monthly'] === null && $company_budget['budget_annual'] === null) : ?>
+                <p class="pe-card-sub" style="font-size:0.85em;color:#999;">
+                    <a href="<?php echo esc_url(wc_get_account_endpoint_url('b2b-company')); ?>"><?php esc_html_e('Configurer →', 'portail-entreprises'); ?></a>
+                </p>
+                <?php endif; ?>
                 <?php if ($company_budget['budget_monthly'] !== null) : ?>
                 <p class="pe-card-sub" style="margin:0 0 4px;font-size:0.8em;color:#666;"><?php esc_html_e('Mensuel', 'portail-entreprises'); ?></p>
                 <div class="pe-progress-bar-container">
@@ -174,6 +197,9 @@ $status_labels = wc_get_order_statuses();
                 <thead>
                     <tr>
                         <th><?php esc_html_e('N° commande', 'portail-entreprises'); ?></th>
+                        <?php if (in_array($role, ['company_admin', 'purchase_manager'], true)) : ?>
+                        <th><?php esc_html_e('Demandeur', 'portail-entreprises'); ?></th>
+                        <?php endif; ?>
                         <th><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
@@ -188,6 +214,14 @@ $status_labels = wc_get_order_statuses();
                                 #<?php echo esc_html($order->get_order_number()); ?>
                             </a>
                         </td>
+                        <?php if (in_array($role, ['company_admin', 'purchase_manager'], true)) : ?>
+                        <td>
+                            <?php
+                            $order_customer = get_userdata((int) $order->get_customer_id());
+                            echo esc_html($order_customer ? $order_customer->display_name : '—');
+                            ?>
+                        </td>
+                        <?php endif; ?>
                         <td><?php echo esc_html(wc_format_datetime($order->get_date_created())); ?></td>
                         <td>
                             <?php
