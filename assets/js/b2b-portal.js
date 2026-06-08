@@ -224,54 +224,31 @@
 
             var doBlock = function () {
                 // ── Page CHECKOUT ──
-                // Le formulaire "Demander une approbation" est injecté par PHP
-                // (woocommerce_review_order_before_payment). En JS, on masque seulement
-                // le bouton de paiement pour éviter le doublon.
+                // Le bouton de paiement est déjà remplacé côté serveur
+                // (filtre woocommerce_order_button_html). Rien à faire en JS.
                 if (peB2B.isCheckout) {
-                    $('#place_order, button[name="woocommerce_checkout_place_order"]').hide();
                     return;
                 }
 
-                // ── Page PANIER ──
+                // ── Mini-panier / panier flottant ──
+                // Géré côté serveur (woocommerce_widget_shopping_cart_buttons).
+                // Ne rien injecter ici pour éviter les doublons.
+
+                // ── Page PANIER uniquement ──
+                // Le bouton "Procéder au paiement" de la page panier n'est pas couvert
+                // par les filtres serveur : on le remplace en JS.
                 var $mainContainers = $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)');
                 $mainContainers.each(function () {
                     $(this).html(noticeHtml);
-                });
-
-                // ── Mini-panier / panier flottant (toutes pages) ──
-                // Cibler tous les boutons "Commander" connus, peu importe le conteneur.
-                var checkoutBtnSelectors = [
-                    'a.checkout-button',
-                    '.checkout-button',
-                    '.woocommerce-mini-cart__buttons .checkout',
-                    '.widget_shopping_cart_content a.checkout',
-                    '.wd-cart-button-checkout',
-                    'a.wc-forward.checkout'
-                ].join(', ');
-
-                $(checkoutBtnSelectors).each(function () {
-                    var $btn = $(this);
-                    if ($btn.data('pe-blocked')) {
-                        return;
-                    }
-                    // Ignorer ceux dans un conteneur panier déjà traité (page panier).
-                    if ($btn.closest('.wc-proceed-to-checkout').find('.pe-checkout-blocked-wrap').length) {
-                        $btn.data('pe-blocked', true);
-                        return;
-                    }
-                    $btn.data('pe-blocked', true).hide();
-                    if (!$btn.parent().find('.pe-checkout-blocked-wrap').length) {
-                        $btn.after(noticeHtml);
-                    }
                 });
             };
 
             // Exécuter immédiatement puis sur chaque rafraîchissement WC/WoodMart.
             doBlock();
             $(document.body).on(
-                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout wc_cart_emptied added_to_cart removed_from_cart',
+                'updated_cart_totals updated_checkout',
                 function () {
-                    $('a.checkout-button, .checkout-button, .woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content a.checkout, .wd-cart-button-checkout, a.wc-forward.checkout').removeData('pe-blocked');
+                    $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)').removeData('pe-blocked');
                     doBlock();
                 }
             );
