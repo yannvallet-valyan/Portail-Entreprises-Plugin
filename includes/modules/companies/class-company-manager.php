@@ -76,6 +76,8 @@ class PE_Company_Manager {
             ['name' => $insert_data['name']]
         );
 
+        do_action( 'pe_company_created', $company_id );
+
         return $company_id;
     }
 
@@ -184,6 +186,8 @@ class PE_Company_Manager {
                 $id,
                 $update_data
             );
+
+            do_action( 'pe_company_updated', $id );
         }
 
         return false !== $result;
