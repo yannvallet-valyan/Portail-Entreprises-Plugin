@@ -66,6 +66,10 @@ class PE_Core {
         // AJAX : édition de centre de coût + référence par les managers.
         add_action('wp_ajax_pe_update_order_b2b_meta', [$this, 'ajax_update_order_b2b_meta']);
 
+        // Rendu de l'endpoint dédié view-order pour les managers.
+        add_action('woocommerce_account_b2b-order_endpoint', [$this, 'render_b2b_order']);
+        add_filter('woocommerce_endpoint_b2b-order_title', fn() => __('Détail de la commande', 'portail-entreprises'));
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -105,6 +109,7 @@ class PE_Core {
             'b2b-users',
             'b2b-budgets',
             'b2b-approvals',
+            'b2b-order',
         ];
     }
 
@@ -493,6 +498,49 @@ class PE_Core {
         }
 
         wp_send_json_success(['message' => __('Informations mises à jour.', 'portail-entreprises')]);
+    }
+
+    /**
+     * Endpoint dédié /mon-compte/b2b-order/ID/ : permet aux managers de consulter
+     * une commande d'un membre de leur entreprise via le template WooCommerce natif.
+     * Compatible HPOS et stockage classique — aucune dépendance aux filtres internes WC.
+     */
+    public function render_b2b_order(): void {
+        global $wp;
+        $order_id = absint($wp->query_vars['b2b-order'] ?? 0);
+
+        $user_id = get_current_user_id();
+        $role    = PE_Permissions::get_user_b2b_role($user_id);
+
+        if (!$order_id || !in_array($role, ['company_admin', 'purchase_manager'], true)) {
+            wc_add_notice(__('Accès refusé.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wc_add_notice(__('Commande introuvable.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company || !PE_Permissions::user_belongs_to_company((int) $order->get_customer_id(), (int) $company->id)) {
+            wc_add_notice(__('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
+        }
+
+        wc_get_template(
+            'myaccount/view-order.php',
+            [
+                'order_id' => $order_id,
+                'order'    => $order,
+                'status'   => $order->get_status(),
+                'notes'    => wc_get_order_notes(['order_id' => $order_id, 'type' => 'customer']),
+            ]
+        );
     }
 
     /**

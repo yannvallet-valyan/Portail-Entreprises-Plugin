@@ -1,0 +1,54 @@
+name: Build Plugin ZIP
+
+on:
+  push:
+    branches:
+      - 'release/**'
+      - 'main'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(grep "define('PE_VERSION'" portail-entreprises.php | grep -oP "'\d+\.\d+\.\d+'" | tr -d "'")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Plugin version: $VERSION"
+
+      - name: Build ZIP
+        run: |
+          SLUG="portail-entreprises-b2b"
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="${SLUG}-${VERSION}.zip"
+
+          mkdir -p /tmp/${SLUG}
+
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='*.sh' \
+            --exclude='*.md' \
+            --exclude='node_modules' \
+            ./ /tmp/${SLUG}/
+
+          cd /tmp
+          zip -r ${ZIP_NAME} ${SLUG}/
+
+          mv /tmp/${ZIP_NAME} $GITHUB_WORKSPACE/
+
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Upload ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 30
