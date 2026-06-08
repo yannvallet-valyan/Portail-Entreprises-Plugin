@@ -275,6 +275,7 @@ class PE_Core {
             'checkoutBlocked'    => $checkout_blocked,
             'checkoutBlockMsg'   => $checkout_block_reason,
             'approvalButtonHtml' => $approval_button_html,
+            'isCheckout'         => is_checkout(),
             'i18n'               => [
                 'confirmApprove'           => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),
                 'confirmReject'            => __('Confirmer le rejet de cette demande ?', 'portail-entreprises'),

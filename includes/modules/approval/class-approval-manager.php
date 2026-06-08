@@ -64,28 +64,15 @@ class PE_Approval_Manager {
             return '';
         }
 
-        global $wpdb;
-        $cost_centers = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE company_id = %d ORDER BY name ASC",
-                (int) $company->id
-            )
-        );
-
         $html = '<div class="pe-approval-fields" style="margin:10px 0;text-align:left;">';
 
-        if (!empty($cost_centers)) {
-            $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
-                . esc_html__('Centre de coût', 'portail-entreprises') . '</label>'
-                . '<select name="b2b_cost_center" style="width:100%;">'
-                . '<option value="">' . esc_html__('-- Sélectionner --', 'portail-entreprises') . '</option>';
-            foreach ($cost_centers as $cc) {
-                $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
-                $html .= '<option value="' . esc_attr((int) $cc->id) . '">' . esc_html($label) . '</option>';
-            }
-            $html .= '</select></p>';
-        }
+        // Centre de coût — champ texte libre.
+        $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
+            . esc_html__('Centre de coût', 'portail-entreprises') . '</label>'
+            . '<input type="text" name="b2b_cost_center_text" style="width:100%;" '
+            . 'placeholder="' . esc_attr__('Service, projet, code interne…', 'portail-entreprises') . '" /></p>';
 
+        // Référence personnelle.
         $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
             . esc_html__('Votre référence', 'portail-entreprises') . '</label>'
             . '<input type="text" name="b2b_personal_reference" style="width:100%;" '
@@ -120,12 +107,14 @@ class PE_Approval_Manager {
             exit;
         }
 
-        $cost_center_id = isset($_POST['b2b_cost_center']) ? absint($_POST['b2b_cost_center']) : 0;
-        $reference      = isset($_POST['b2b_personal_reference'])
+        $cost_center_text = isset($_POST['b2b_cost_center_text'])
+            ? sanitize_text_field(wp_unslash($_POST['b2b_cost_center_text']))
+            : '';
+        $reference        = isset($_POST['b2b_personal_reference'])
             ? sanitize_text_field(wp_unslash($_POST['b2b_personal_reference']))
             : '';
 
-        $order = $this->create_order_from_cart($user_id, $cost_center_id, $reference);
+        $order = $this->create_order_from_cart($user_id, $cost_center_text, $reference);
 
         if (!$order instanceof \WC_Order) {
             wc_add_notice(__('Impossible de créer la demande. Veuillez réessayer.', 'portail-entreprises'), 'error');
@@ -136,7 +125,7 @@ class PE_Approval_Manager {
         $amount = (float) $order->get_total();
         $order->update_status('pending-approval', __('Commande soumise à validation par le demandeur.', 'portail-entreprises'));
 
-        $this->create_approval_request((int) $order->get_id(), $user_id, $amount, $cost_center_id > 0 ? $cost_center_id : null);
+        $this->create_approval_request((int) $order->get_id(), $user_id, $amount, null);
 
         // Vider le panier après soumission.
         WC()->cart->empty_cart();
@@ -153,8 +142,7 @@ class PE_Approval_Manager {
     /**
      * Construit une commande WooCommerce à partir du panier courant.
      */
-    private function create_order_from_cart(int $user_id, int $cost_center_id = 0, string $reference = ''): ?\WC_Order {
-        global $wpdb;
+    private function create_order_from_cart(int $user_id, string $cost_center_text = '', string $reference = ''): ?\WC_Order {
         $cart = WC()->cart;
 
         try {
@@ -201,19 +189,9 @@ class PE_Approval_Manager {
             $order->set_created_via('b2b-approval-request');
             $order->update_meta_data('_b2b_approval_request', 1);
 
-            // Centre de coût + référence personnelle.
-            if ($cost_center_id > 0) {
-                $order->update_meta_data('_b2b_cost_center_id', $cost_center_id);
-                $cc = $wpdb->get_row(
-                    $wpdb->prepare(
-                        "SELECT name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE id = %d LIMIT 1",
-                        $cost_center_id
-                    )
-                );
-                if ($cc) {
-                    $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
-                    $order->update_meta_data('_b2b_cost_center_label', $label);
-                }
+            // Centre de coût (texte libre) + référence personnelle.
+            if ('' !== $cost_center_text) {
+                $order->update_meta_data('_b2b_cost_center_label', $cost_center_text);
             }
             if ('' !== $reference) {
                 $order->update_meta_data('_b2b_personal_reference', $reference);

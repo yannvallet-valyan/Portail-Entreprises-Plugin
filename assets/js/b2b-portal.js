@@ -223,20 +223,40 @@
                 '</div>';
 
             var doBlock = function () {
-                // 1. Conteneurs principal du panier : remplace l'intérieur (1 seule notice).
+                // ── Page CHECKOUT ──
+                // Le formulaire "Demander une approbation" est injecté par PHP
+                // (woocommerce_review_order_before_payment). En JS, on masque seulement
+                // le bouton de paiement pour éviter le doublon.
+                if (peB2B.isCheckout) {
+                    $('#place_order, button[name="woocommerce_checkout_place_order"]').hide();
+                    return;
+                }
+
+                // ── Page PANIER ──
                 var $mainContainers = $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)');
                 $mainContainers.each(function () {
                     $(this).html(noticeHtml);
                 });
 
-                // 2. Boutons checkout orphelins hors conteneur principal.
-                $('a.checkout-button, .checkout-button').each(function () {
+                // ── Mini-panier / panier flottant (toutes pages) ──
+                // Cibler tous les boutons "Commander" connus, peu importe le conteneur.
+                var checkoutBtnSelectors = [
+                    'a.checkout-button',
+                    '.checkout-button',
+                    '.woocommerce-mini-cart__buttons .checkout',
+                    '.widget_shopping_cart_content a.checkout',
+                    '.wd-cart-button-checkout',
+                    'a.wc-forward.checkout'
+                ].join(', ');
+
+                $(checkoutBtnSelectors).each(function () {
                     var $btn = $(this);
                     if ($btn.data('pe-blocked')) {
                         return;
                     }
-                    // Ignorer ceux déjà à l'intérieur d'un container traité.
-                    if ($btn.closest('.wc-proceed-to-checkout').length) {
+                    // Ignorer ceux dans un conteneur panier déjà traité (page panier).
+                    if ($btn.closest('.wc-proceed-to-checkout').find('.pe-checkout-blocked-wrap').length) {
+                        $btn.data('pe-blocked', true);
                         return;
                     }
                     $btn.data('pe-blocked', true).hide();
@@ -244,37 +264,14 @@
                         $btn.after(noticeHtml);
                     }
                 });
-
-                // 3. Mini-panier et panier flottant WoodMart : remplacer le bouton Commander.
-                var miniCartSelectors = [
-                    '.woocommerce-mini-cart__buttons',
-                    '.widget_shopping_cart_content .wc-proceed-to-checkout',
-                    '.woodmart-side-cart .woocommerce-mini-cart__buttons',
-                    '.woodmart-cart-sidebar .woocommerce-mini-cart__buttons',
-                    '.woo-side-cart .woocommerce-mini-cart__buttons'
-                ].join(', ');
-
-                $(miniCartSelectors).each(function () {
-                    var $container = $(this);
-                    if ($container.data('pe-blocked')) {
-                        return;
-                    }
-                    $container.data('pe-blocked', true);
-                    $container.find('.checkout, a.checkout-button').hide();
-                    if (!$container.find('.pe-checkout-blocked-wrap').length) {
-                        $container.append(noticeHtml);
-                    }
-                });
             };
 
             // Exécuter immédiatement puis sur chaque rafraîchissement WC/WoodMart.
             doBlock();
             $(document.body).on(
-                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout wc_cart_emptied',
+                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout wc_cart_emptied added_to_cart removed_from_cart',
                 function () {
-                    $('a.checkout-button, .checkout-button').removeData('pe-blocked');
-                    $('.woocommerce-mini-cart__buttons, .widget_shopping_cart_content .wc-proceed-to-checkout, .woodmart-side-cart .woocommerce-mini-cart__buttons, .woodmart-cart-sidebar .woocommerce-mini-cart__buttons, .woo-side-cart .woocommerce-mini-cart__buttons').removeData('pe-blocked');
-                    $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)').removeData('pe-blocked');
+                    $('a.checkout-button, .checkout-button, .woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content a.checkout, .wd-cart-button-checkout, a.wc-forward.checkout').removeData('pe-blocked');
                     doBlock();
                 }
             );
