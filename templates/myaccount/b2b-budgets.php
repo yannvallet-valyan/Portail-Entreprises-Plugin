@@ -52,9 +52,32 @@ if ($is_admin && isset($_POST['pe_update_budgets']) && isset($_POST['_wpnonce'])
     }
 }
 
+// Traitement de la mise à jour du budget entreprise (admin uniquement)
+if ($is_admin && isset($_POST['pe_update_company_budget']) && isset($_POST['_wpnonce_company_budget'])) {
+    if (!wp_verify_nonce(sanitize_key($_POST['_wpnonce_company_budget']), 'pe_update_company_budget_' . (int) $company->id)) {
+        wc_add_notice(__('Erreur de sécurité.', 'portail-entreprises'), 'error');
+    } else {
+        global $wpdb;
+        $co_monthly = isset($_POST['budget_monthly_company']) && $_POST['budget_monthly_company'] !== '' ? (float) $_POST['budget_monthly_company'] : null;
+        $co_annual  = isset($_POST['budget_annual_company'])  && $_POST['budget_annual_company']  !== '' ? (float) $_POST['budget_annual_company']  : null;
+        $co_block   = isset($_POST['budget_block_enabled']) ? 1 : 0;
+        $wpdb->update(
+            $wpdb->prefix . 'b2b_companies',
+            ['budget_monthly' => $co_monthly, 'budget_annual' => $co_annual, 'budget_block_enabled' => $co_block],
+            ['id' => (int) $company->id],
+            ['%s', '%s', '%d'],
+            ['%d']
+        );
+        // Rafraîchir les données de l'entreprise
+        $company = PE_Permissions::get_user_company($user_id);
+        wc_add_notice(__('Budget entreprise mis à jour.', 'portail-entreprises'), 'success');
+    }
+}
+
 // Affichage de mon budget ou des budgets de tous les utilisateurs (admin)
-$my_summary = $budget_mgr->get_usage_summary($user_id);
-$all_users  = $is_admin ? $user_mgr->get_company_users_with_budgets((int) $company->id) : [];
+$my_summary     = $budget_mgr->get_usage_summary($user_id);
+$all_users      = $is_admin ? $user_mgr->get_company_users_with_budgets((int) $company->id) : [];
+$company_budget = $is_admin ? $budget_mgr->get_company_usage_summary((int) $company->id) : null;
 ?>
 
 <div class="pe-budgets-page">
@@ -240,6 +263,93 @@ $all_users  = $is_admin ? $user_mgr->get_company_users_with_budgets((int) $compa
                     <button type="submit" name="pe_update_budgets" value="1" class="pe-btn pe-btn-primary">
                         <?php esc_html_e('Enregistrer les budgets', 'portail-entreprises'); ?>
                     </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Budget entreprise (admin uniquement) -->
+    <?php if ($is_admin && $company_budget !== null) : ?>
+    <div class="pe-card" style="margin-top:24px;">
+        <div class="pe-card-header">
+            <h3><?php esc_html_e('Budget entreprise', 'portail-entreprises'); ?></h3>
+        </div>
+        <div class="pe-card-body">
+
+            <!-- Résumé consommation -->
+            <div class="pe-budget-overview" style="margin-bottom:24px;">
+                <div class="pe-budget-block">
+                    <h4><?php esc_html_e('Consommation mensuelle', 'portail-entreprises'); ?></h4>
+                    <?php if ($company_budget['budget_monthly'] !== null) : ?>
+                    <?php $co_pct_m = $company_budget['percent_month'] ?? 0; ?>
+                    <div class="pe-progress-bar-container">
+                        <div class="pe-progress-bar <?php echo $co_pct_m >= 90 ? 'pe-progress-danger' : ($co_pct_m >= 70 ? 'pe-progress-warning' : ''); ?>"
+                             style="width:<?php echo esc_attr($co_pct_m); ?>%"></div>
+                    </div>
+                    <div class="pe-budget-figures">
+                        <span class="pe-spent"><?php echo wp_kses_post(wc_price($company_budget['spent_month'])); ?></span>
+                        <span class="pe-separator">/</span>
+                        <span class="pe-limit"><?php echo wp_kses_post(wc_price($company_budget['budget_monthly'])); ?></span>
+                        <span class="pe-percent">(<?php echo esc_html($co_pct_m); ?>%)</span>
+                    </div>
+                    <p class="pe-remaining"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_month']))); ?></p>
+                    <?php else : ?>
+                    <p class="pe-unlimited"><em><?php esc_html_e('Non configuré', 'portail-entreprises'); ?></em></p>
+                    <p class="pe-spent-info"><?php printf(esc_html__('Dépensé ce mois : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['spent_month']))); ?></p>
+                    <?php endif; ?>
+                </div>
+
+                <div class="pe-budget-block">
+                    <h4><?php esc_html_e('Consommation annuelle', 'portail-entreprises'); ?> (<?php echo esc_html(date('Y')); ?>)</h4>
+                    <?php if ($company_budget['budget_annual'] !== null) : ?>
+                    <?php $co_pct_y = $company_budget['percent_year'] ?? 0; ?>
+                    <div class="pe-progress-bar-container">
+                        <div class="pe-progress-bar <?php echo $co_pct_y >= 90 ? 'pe-progress-danger' : ($co_pct_y >= 70 ? 'pe-progress-warning' : ''); ?>"
+                             style="width:<?php echo esc_attr($co_pct_y); ?>%"></div>
+                    </div>
+                    <div class="pe-budget-figures">
+                        <span class="pe-spent"><?php echo wp_kses_post(wc_price($company_budget['spent_year'])); ?></span>
+                        <span class="pe-separator">/</span>
+                        <span class="pe-limit"><?php echo wp_kses_post(wc_price($company_budget['budget_annual'])); ?></span>
+                        <span class="pe-percent">(<?php echo esc_html($co_pct_y); ?>%)</span>
+                    </div>
+                    <p class="pe-remaining"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_year']))); ?></p>
+                    <?php else : ?>
+                    <p class="pe-unlimited"><em><?php esc_html_e('Non configuré', 'portail-entreprises'); ?></em></p>
+                    <p class="pe-spent-info"><?php printf(esc_html__('Dépensé cette année : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['spent_year']))); ?></p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Formulaire de configuration -->
+            <form method="post" action="" class="pe-form">
+                <?php wp_nonce_field('pe_update_company_budget_' . (int) $company->id, '_wpnonce_company_budget'); ?>
+                <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end;">
+                    <div class="pe-form-group" style="flex:1;min-width:160px;">
+                        <label class="pe-label"><?php esc_html_e('Budget mensuel (€)', 'portail-entreprises'); ?></label>
+                        <input type="number" name="budget_monthly_company" class="pe-input" min="0" step="0.01"
+                               value="<?php echo esc_attr($company->budget_monthly ?? ''); ?>"
+                               placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" />
+                    </div>
+                    <div class="pe-form-group" style="flex:1;min-width:160px;">
+                        <label class="pe-label"><?php esc_html_e('Budget annuel (€)', 'portail-entreprises'); ?></label>
+                        <input type="number" name="budget_annual_company" class="pe-input" min="0" step="0.01"
+                               value="<?php echo esc_attr($company->budget_annual ?? ''); ?>"
+                               placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" />
+                    </div>
+                    <div class="pe-form-group" style="flex:0 0 auto;">
+                        <label class="pe-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                            <input type="checkbox" name="budget_block_enabled" value="1"
+                                   <?php checked((int)($company->budget_block_enabled ?? 1), 1); ?> />
+                            <?php esc_html_e('Bloquer si budget dépassé', 'portail-entreprises'); ?>
+                        </label>
+                    </div>
+                    <div class="pe-form-group" style="flex:0 0 auto;">
+                        <button type="submit" name="pe_update_company_budget" value="1" class="pe-btn pe-btn-primary">
+                            <?php esc_html_e('Enregistrer', 'portail-entreprises'); ?>
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
