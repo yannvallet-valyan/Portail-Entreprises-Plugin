@@ -75,6 +75,10 @@ class PE_Core {
         PE_Approval_Manager::get_instance()->init();
         PE_Magic_Link_Manager::get_instance()->init();
 
+        // Module de tarification B2B
+        require_once PE_PATH . 'includes/modules/pricing/class-pricing-manager.php';
+        PE_Pricing_Manager::get_instance()->init();
+
         // Admin
         if (is_admin()) {
             require_once PE_PATH . 'includes/admin/class-admin.php';
