@@ -243,7 +243,8 @@ class PE_Magic_Link_Manager {
             $this->render_message(
                 __('Lien invalide ou expiré.', 'portail-entreprises'),
                 $validation->get_error_message(),
-                'error'
+                'error',
+                true
             );
             return;
         }
@@ -358,7 +359,8 @@ class PE_Magic_Link_Manager {
             $this->render_message(
                 __('Action impossible', 'portail-entreprises'),
                 __('Cette demande a déjà été traitée ou vous n\'êtes pas autorisé à la valider.', 'portail-entreprises'),
-                'error'
+                'error',
+                true
             );
             return;
         }
@@ -562,14 +564,25 @@ class PE_Magic_Link_Manager {
     /**
      * Affiche un message simple (succès / erreur / info).
      */
-    private function render_message(string $title, string $detail, string $type = 'info'): void {
+    private function render_message(string $title, string $detail, string $type = 'info', bool $show_approvals_link = false): void {
         $icons = ['success' => '✓', 'error' => '✕', 'info' => 'ℹ'];
         $icon  = $icons[$type] ?? 'ℹ';
+
+        $approvals_link = '';
+        if ($show_approvals_link) {
+            $approvals_url  = wc_get_account_endpoint_url('b2b-approvals');
+            $approvals_link = '<p style="margin-top:12px;font-size:14px;">'
+                . esc_html__('Vous pouvez retrouver toutes vos demandes en attente dans votre espace personnel :', 'portail-entreprises')
+                . ' <a href="' . esc_url($approvals_url) . '" style="color:#2d6ebd;font-weight:600;">'
+                . esc_html__('Mes approbations', 'portail-entreprises')
+                . '</a></p>';
+        }
 
         $content = '<div class="pe-ml-card pe-ml-message pe-ml-' . esc_attr($type) . '">'
             . '<div class="pe-ml-icon">' . esc_html($icon) . '</div>'
             . '<h1>' . esc_html($title) . '</h1>'
             . '<p>' . esc_html($detail) . '</p>'
+            . $approvals_link
             . '<a href="' . esc_url(home_url('/')) . '" class="pe-ml-home">' . esc_html__('Retour à l\'accueil', 'portail-entreprises') . '</a>'
             . '</div>';
 
