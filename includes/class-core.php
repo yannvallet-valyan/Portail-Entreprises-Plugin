@@ -66,8 +66,9 @@ class PE_Core {
         // AJAX : édition de centre de coût + référence par les managers.
         add_action('wp_ajax_pe_update_order_b2b_meta', [$this, 'ajax_update_order_b2b_meta']);
 
-        // Accès managers aux commandes de leur entreprise (page view-order).
-        add_action('template_redirect', [$this, 'allow_manager_view_company_order'], 1);
+        // Rendu de l'endpoint dédié view-order pour les managers.
+        add_action('woocommerce_account_b2b-order_endpoint', [$this, 'render_b2b_order']);
+        add_filter('woocommerce_endpoint_b2b-order_title', fn() => __('Détail de la commande', 'portail-entreprises'));
 
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
@@ -108,6 +109,7 @@ class PE_Core {
             'b2b-users',
             'b2b-budgets',
             'b2b-approvals',
+            'b2b-order',
         ];
     }
 
@@ -499,63 +501,46 @@ class PE_Core {
     }
 
     /**
-     * Permet aux managers (company_admin / purchase_manager) de consulter la
-     * page WooCommerce "view-order" pour les commandes appartenant à leur entreprise,
-     * sans modifier la commande ni ses données.
+     * Endpoint dédié /mon-compte/b2b-order/ID/ : permet aux managers de consulter
+     * une commande d'un membre de leur entreprise via le template WooCommerce natif.
+     * Compatible HPOS et stockage classique — aucune dépendance aux filtres internes WC.
      */
-    public function allow_manager_view_company_order(): void {
-        if (!isset($_GET['b2b_manager_view'])) {
-            return;
-        }
-
-        if (!is_wc_endpoint_url('view-order')) {
-            return;
-        }
+    public function render_b2b_order(): void {
+        global $wp;
+        $order_id = absint($wp->query_vars['b2b-order'] ?? 0);
 
         $user_id = get_current_user_id();
-        if (!$user_id) {
-            return;
-        }
+        $role    = PE_Permissions::get_user_b2b_role($user_id);
 
-        $role = PE_Permissions::get_user_b2b_role($user_id);
-        if (!in_array($role, ['company_admin', 'purchase_manager'], true)) {
-            return;
-        }
-
-        global $wp;
-        $order_id = absint($wp->query_vars['view-order'] ?? 0);
-        if (!$order_id) {
-            return;
+        if (!$order_id || !in_array($role, ['company_admin', 'purchase_manager'], true)) {
+            wc_add_notice(__('Accès refusé.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
         }
 
         $order = wc_get_order($order_id);
         if (!$order) {
-            return;
+            wc_add_notice(__('Commande introuvable.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
         }
 
         $company = PE_Permissions::get_user_company($user_id);
-        if (!$company) {
-            return;
+        if (!$company || !PE_Permissions::user_belongs_to_company((int) $order->get_customer_id(), (int) $company->id)) {
+            wc_add_notice(__('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
         }
 
-        $order_customer_id = (int) $order->get_customer_id();
-        if (!PE_Permissions::user_belongs_to_company($order_customer_id, (int) $company->id)) {
-            return;
-        }
-
-        // Injecter un filtre qui court-circuite la vérification de propriété dans wc_get_orders().
-        // WooCommerce appelle wc_get_orders(['customer' => $user_id, 'id' => $order_id])
-        // pour valider l'accès. On retourne directement l'objet commande si l'ID correspond.
-        add_filter('woocommerce_order_query', function ($result, $query) use ($order_id, $order) {
-            $args       = method_exists($query, 'get_query_vars') ? $query->get_query_vars() : [];
-            $queried_id = (int) ($args['id'] ?? 0);
-
-            if ($queried_id === $order_id && isset($args['customer'])) {
-                return [$order];
-            }
-
-            return $result;
-        }, 10, 2);
+        wc_get_template(
+            'myaccount/view-order.php',
+            [
+                'order_id' => $order_id,
+                'order'    => $order,
+                'status'   => $order->get_status(),
+                'notes'    => wc_get_order_notes(['order_id' => $order_id, 'type' => 'customer']),
+            ]
+        );
     }
 
     /**

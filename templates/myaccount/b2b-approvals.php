@@ -106,6 +106,7 @@ $wc_status_labels = wc_get_order_statuses();
                         <th><?php esc_html_e('Référence', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Approuvé par', 'portail-entreprises'); ?></th>
                         <?php if ($can_approve) : ?>
                         <th><?php esc_html_e('Actions', 'portail-entreprises'); ?></th>
                         <?php endif; ?>
@@ -173,6 +174,21 @@ $wc_status_labels = wc_get_order_statuses();
                             </div>
                             <?php endif; ?>
                         </td>
+                        <td>
+                            <?php
+                            if (!empty($req->approver_id)) {
+                                $approver = get_userdata((int) $req->approver_id);
+                                if ($approver) {
+                                    $full = trim($approver->first_name . ' ' . $approver->last_name);
+                                    echo esc_html($full ?: $approver->display_name);
+                                } else {
+                                    echo '<em>—</em>';
+                                }
+                            } else {
+                                echo '<em>—</em>';
+                            }
+                            ?>
+                        </td>
                         <?php if ($can_approve) : ?>
                         <td class="pe-actions-cell">
                             <?php if ('pending' === $req->status) : ?>
@@ -190,7 +206,7 @@ $wc_status_labels = wc_get_order_statuses();
                             </button>
                             <?php endif; ?>
                             <?php if ($order) : ?>
-                            <a href="<?php echo esc_url(add_query_arg('b2b_manager_view', '1', $order->get_view_order_url())); ?>"
+                            <a href="<?php echo esc_url(wc_get_account_endpoint_url('b2b-order') . $order->get_id() . '/'); ?>"
                                class="pe-btn pe-btn-sm pe-btn-secondary" style="margin-top:4px;">
                                 <?php esc_html_e('Voir', 'portail-entreprises'); ?>
                             </a>
