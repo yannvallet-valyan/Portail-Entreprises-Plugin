@@ -204,4 +204,76 @@ if ($is_admin && isset($_POST['pe_update_company']) && isset($_POST['_wpnonce'])
         </div>
     </div>
     <?php endif; ?>
+
+    <?php if ($is_admin) : ?>
+    <!-- Budget entreprise -->
+    <?php
+    // Handle form submission
+    if (isset($_POST['pe_update_company_budget']) && isset($_POST['_wpnonce_budget'])) {
+        if (!wp_verify_nonce(sanitize_key($_POST['_wpnonce_budget']), 'pe_update_company_budget_' . (int) $company->id)) {
+            wc_add_notice(__('Erreur de sécurité.', 'portail-entreprises'), 'error');
+        } else {
+            global $wpdb;
+            $bm = isset($_POST['budget_monthly_company']) && $_POST['budget_monthly_company'] !== ''
+                ? (float) $_POST['budget_monthly_company'] : null;
+            $ba = isset($_POST['budget_annual_company']) && $_POST['budget_annual_company'] !== ''
+                ? (float) $_POST['budget_annual_company'] : null;
+            $block = isset($_POST['budget_block_enabled']) ? 1 : 0;
+
+            $wpdb->update(
+                $wpdb->prefix . 'b2b_companies',
+                [
+                    'budget_monthly'      => $bm,
+                    'budget_annual'       => $ba,
+                    'budget_block_enabled' => $block,
+                ],
+                ['id' => (int) $company->id],
+                ['%s', '%s', '%d'],
+                ['%d']
+            );
+            wc_add_notice(__('Budget entreprise mis à jour.', 'portail-entreprises'), 'success');
+            $company = PE_Permissions::get_user_company($user_id);
+        }
+    }
+    ?>
+    <div class="pe-card" style="margin-top:20px;">
+        <div class="pe-card-header">
+            <h3><?php esc_html_e('Budget entreprise', 'portail-entreprises'); ?></h3>
+        </div>
+        <div class="pe-card-body">
+            <form method="post" action="" class="pe-form">
+                <?php wp_nonce_field('pe_update_company_budget_' . (int) $company->id, '_wpnonce_budget'); ?>
+                <div class="pe-form-row-grid">
+                    <div>
+                        <label for="budget_monthly_company"><?php esc_html_e('Budget mensuel (€)', 'portail-entreprises'); ?></label>
+                        <input type="number" id="budget_monthly_company" name="budget_monthly_company" step="0.01" min="0"
+                               value="<?php echo esc_attr($company->budget_monthly ?? ''); ?>" class="pe-input"
+                               placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" />
+                    </div>
+                    <div>
+                        <label for="budget_annual_company"><?php esc_html_e('Budget annuel (€)', 'portail-entreprises'); ?></label>
+                        <input type="number" id="budget_annual_company" name="budget_annual_company" step="0.01" min="0"
+                               value="<?php echo esc_attr($company->budget_annual ?? ''); ?>" class="pe-input"
+                               placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" />
+                    </div>
+                </div>
+                <div class="pe-form-row" style="margin-top:12px;">
+                    <label>
+                        <input type="checkbox" name="budget_block_enabled" value="1"
+                               <?php checked((int)($company->budget_block_enabled ?? 1), 1); ?> />
+                        <?php esc_html_e('Bloquer les commandes quand le budget entreprise est atteint', 'portail-entreprises'); ?>
+                    </label>
+                    <p class="pe-text-muted" style="margin:4px 0 0;font-size:0.85em;">
+                        <?php esc_html_e('Si décoché, le budget est affiché à titre indicatif uniquement.', 'portail-entreprises'); ?>
+                    </p>
+                </div>
+                <div class="pe-form-actions">
+                    <button type="submit" name="pe_update_company_budget" value="1" class="pe-btn pe-btn-primary">
+                        <?php esc_html_e('Enregistrer le budget', 'portail-entreprises'); ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>

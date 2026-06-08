@@ -18,6 +18,10 @@ if (!$company) {
 }
 
 $budget_summary  = $budget_mgr->get_usage_summary($user_id);
+$company_budget  = null;
+if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
+    $company_budget = $budget_mgr->get_company_usage_summary((int) $company->id);
+}
 $pending_count   = 0;
 $user_count      = 0;
 $recent_orders   = [];
@@ -29,12 +33,13 @@ if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
     $user_count       = count($company_users);
 }
 
-// Récupérer les 5 dernières commandes de l'utilisateur
+// Orders: own orders + approval-workflow orders for this user
 $recent_orders = wc_get_orders([
     'customer_id' => $user_id,
-    'limit'       => 5,
+    'limit'       => 10,
     'orderby'     => 'date',
     'order'       => 'DESC',
+    'status'      => ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'],
 ]);
 
 $status_labels = wc_get_order_statuses();
@@ -92,6 +97,38 @@ $status_labels = wc_get_order_statuses();
                     );
                     ?>
                 </p>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($company_budget && ($company_budget['budget_monthly'] !== null || $company_budget['budget_annual'] !== null)) : ?>
+        <div class="pe-card pe-card-budget">
+            <div class="pe-card-icon">🏭</div>
+            <div class="pe-card-body">
+                <h3 class="pe-card-title"><?php esc_html_e('Budget entreprise', 'portail-entreprises'); ?></h3>
+                <?php if ($company_budget['budget_monthly'] !== null) : ?>
+                <p class="pe-card-sub" style="margin:0 0 4px;font-size:0.8em;color:#666;"><?php esc_html_e('Mensuel', 'portail-entreprises'); ?></p>
+                <div class="pe-progress-bar-container">
+                    <div class="pe-progress-bar" style="width:<?php echo esc_attr((string)($company_budget['percent_month'] ?? 0)); ?>%;"></div>
+                </div>
+                <p class="pe-card-meta">
+                    <?php echo wp_kses_post(wc_price($company_budget['spent_month'])); ?> / <?php echo wp_kses_post(wc_price($company_budget['budget_monthly'])); ?>
+                </p>
+                <p class="pe-card-sub"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_month']))); ?></p>
+                <?php endif; ?>
+                <?php if ($company_budget['budget_annual'] !== null) : ?>
+                <p class="pe-card-sub" style="margin:8px 0 4px;font-size:0.8em;color:#666;"><?php esc_html_e('Annuel', 'portail-entreprises'); ?></p>
+                <div class="pe-progress-bar-container">
+                    <div class="pe-progress-bar" style="width:<?php echo esc_attr((string)($company_budget['percent_year'] ?? 0)); ?>%;"></div>
+                </div>
+                <p class="pe-card-meta">
+                    <?php echo wp_kses_post(wc_price($company_budget['spent_year'])); ?> / <?php echo wp_kses_post(wc_price($company_budget['budget_annual'])); ?>
+                </p>
+                <p class="pe-card-sub"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_year']))); ?></p>
+                <?php endif; ?>
+                <?php if (!$company_budget['block_enabled']) : ?>
+                <p class="pe-card-sub" style="font-size:0.75em;color:#888;"><?php esc_html_e('(indicatif — blocage désactivé)', 'portail-entreprises'); ?></p>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
