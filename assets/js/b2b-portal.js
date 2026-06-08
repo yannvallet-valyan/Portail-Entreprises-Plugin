@@ -223,50 +223,32 @@
                 '</div>';
 
             var doBlock = function () {
-                // 1. Conteneurs principal du panier : remplace l'intérieur (1 seule notice).
+                // ── Page CHECKOUT ──
+                // Le bouton de paiement est déjà remplacé côté serveur
+                // (filtre woocommerce_order_button_html). Rien à faire en JS.
+                if (peB2B.isCheckout) {
+                    return;
+                }
+
+                // ── Mini-panier / panier flottant ──
+                // Géré côté serveur (woocommerce_widget_shopping_cart_buttons).
+                // Ne rien injecter ici pour éviter les doublons.
+
+                // ── Page PANIER uniquement ──
+                // Le bouton "Procéder au paiement" de la page panier n'est pas couvert
+                // par les filtres serveur : on le remplace en JS.
                 var $mainContainers = $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)');
                 $mainContainers.each(function () {
                     $(this).html(noticeHtml);
-                });
-
-                // 2. Boutons checkout orphelins hors conteneur principal.
-                $('a.checkout-button, .checkout-button').each(function () {
-                    var $btn = $(this);
-                    if ($btn.data('pe-blocked')) {
-                        return;
-                    }
-                    // Ignorer ceux déjà à l'intérieur d'un container traité.
-                    if ($btn.closest('.wc-proceed-to-checkout').length) {
-                        return;
-                    }
-                    $btn.data('pe-blocked', true).hide();
-                    if (!$btn.parent().find('.pe-checkout-blocked-wrap').length) {
-                        $btn.after(noticeHtml);
-                    }
-                });
-
-                // 3. Mini-panier : masquer le lien "Commander" et ajouter la notice.
-                var $minicartCheckout = $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout');
-                $minicartCheckout.each(function () {
-                    var $btn = $(this);
-                    if ($btn.data('pe-blocked')) {
-                        return;
-                    }
-                    $btn.data('pe-blocked', true).hide();
-                    if (!$btn.siblings('.pe-checkout-blocked-wrap').length) {
-                        $btn.after(noticeHtml);
-                    }
                 });
             };
 
             // Exécuter immédiatement puis sur chaque rafraîchissement WC/WoodMart.
             doBlock();
             $(document.body).on(
-                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout',
+                'updated_cart_totals updated_checkout',
                 function () {
-                    // Réinitialiser les boutons orphelins après rechargement des fragments.
-                    $('a.checkout-button, .checkout-button').removeData('pe-blocked');
-                    $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout').removeData('pe-blocked');
+                    $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)').removeData('pe-blocked');
                     doBlock();
                 }
             );

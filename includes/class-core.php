@@ -53,7 +53,7 @@ class PE_Core {
         // Enqueue des assets
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_assets'], 20);
 
-        // Ajout du champ centre de coût au checkout
+        // Ajout du champ centre de coût au checkout (rôles non-requester)
         add_filter('woocommerce_checkout_fields', [$this, 'add_cost_center_field']);
 
         // Sauvegarde du centre de coût sur la commande
@@ -250,12 +250,12 @@ class PE_Core {
             true
         );
 
-        // Checkout blocking data for JS (WoodMart compatibility).
-        $checkout_blocked       = false;
-        $checkout_block_reason  = '';
-        $approval_button_html   = '';
+        // Checkout blocking data for JS — evaluated on ALL pages so the mini-cart is also updated.
+        $checkout_blocked      = false;
+        $checkout_block_reason = '';
+        $approval_button_html  = '';
 
-        if ((is_cart() || is_checkout()) && class_exists('PE_Budget_Manager')) {
+        if (is_user_logged_in() && class_exists('PE_Budget_Manager')) {
             $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
             if (true !== $reason) {
                 $checkout_blocked      = true;
@@ -272,6 +272,7 @@ class PE_Core {
             'checkoutBlocked'    => $checkout_blocked,
             'checkoutBlockMsg'   => $checkout_block_reason,
             'approvalButtonHtml' => $approval_button_html,
+            'isCheckout'         => is_checkout(),
             'i18n'               => [
                 'confirmApprove'           => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),
                 'confirmReject'            => __('Confirmer le rejet de cette demande ?', 'portail-entreprises'),

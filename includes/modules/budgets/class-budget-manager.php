@@ -30,6 +30,9 @@ class PE_Budget_Manager {
         // On garde uniquement le filtre checkout pour bloquer la validation serveur.
         add_filter('woocommerce_order_button_html', [$this, 'maybe_hide_place_order_button']);
 
+        // Blocage serveur du mini-panier / panier flottant WoodMart : remplace les boutons natifs.
+        add_action('woocommerce_widget_shopping_cart_buttons', [$this, 'maybe_block_minicart_button'], 1);
+
         // Cron mensuel de remise à zéro
         add_action('pe_reset_monthly_budgets', [$this, 'reset_monthly_usage']);
 
