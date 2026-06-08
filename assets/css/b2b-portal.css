@@ -831,3 +831,39 @@
 .pe-order-status-cancelled  { color: #b71c1c; }
 .pe-order-status-pending, .pe-order-status-pending-payment { color: #e65100; }
 .pe-order-status-pending-approval { color: #6a1b9a; }
+
+/* =========================================================
+   Formulaire société — form-table dans les cartes de la grille
+   Labels affichés au-dessus des inputs (évite le débordement
+   de la colonne th=200px dans des cartes étroites).
+   ========================================================= */
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table tr,
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table th,
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table td {
+    display: block;
+    width: auto;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table th {
+    padding-top: 12px;
+    padding-bottom: 4px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--pe-navy);
+}
+
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table td {
+    padding-top: 0;
+    padding-bottom: 8px;
+}
+
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table .regular-text,
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table input[type="text"],
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table input[type="number"],
+.pe-admin-wrap .pe-form-grid .pe-form-card .form-table select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
