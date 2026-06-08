@@ -245,16 +245,24 @@
                     }
                 });
 
-                // 3. Mini-panier : masquer le lien "Commander" et ajouter la notice.
-                var $minicartCheckout = $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout');
-                $minicartCheckout.each(function () {
-                    var $btn = $(this);
-                    if ($btn.data('pe-blocked')) {
+                // 3. Mini-panier et panier flottant WoodMart : remplacer le bouton Commander.
+                var miniCartSelectors = [
+                    '.woocommerce-mini-cart__buttons',
+                    '.widget_shopping_cart_content .wc-proceed-to-checkout',
+                    '.woodmart-side-cart .woocommerce-mini-cart__buttons',
+                    '.woodmart-cart-sidebar .woocommerce-mini-cart__buttons',
+                    '.woo-side-cart .woocommerce-mini-cart__buttons'
+                ].join(', ');
+
+                $(miniCartSelectors).each(function () {
+                    var $container = $(this);
+                    if ($container.data('pe-blocked')) {
                         return;
                     }
-                    $btn.data('pe-blocked', true).hide();
-                    if (!$btn.siblings('.pe-checkout-blocked-wrap').length) {
-                        $btn.after(noticeHtml);
+                    $container.data('pe-blocked', true);
+                    $container.find('.checkout, a.checkout-button').hide();
+                    if (!$container.find('.pe-checkout-blocked-wrap').length) {
+                        $container.append(noticeHtml);
                     }
                 });
             };
@@ -262,11 +270,11 @@
             // Exécuter immédiatement puis sur chaque rafraîchissement WC/WoodMart.
             doBlock();
             $(document.body).on(
-                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout',
+                'wc_fragments_refreshed wc_fragments_loaded updated_cart_totals updated_checkout wc_cart_emptied',
                 function () {
-                    // Réinitialiser les boutons orphelins après rechargement des fragments.
                     $('a.checkout-button, .checkout-button').removeData('pe-blocked');
-                    $('.woocommerce-mini-cart__buttons .checkout, .widget_shopping_cart_content .checkout').removeData('pe-blocked');
+                    $('.woocommerce-mini-cart__buttons, .widget_shopping_cart_content .wc-proceed-to-checkout, .woodmart-side-cart .woocommerce-mini-cart__buttons, .woodmart-cart-sidebar .woocommerce-mini-cart__buttons, .woo-side-cart .woocommerce-mini-cart__buttons').removeData('pe-blocked');
+                    $('.wc-proceed-to-checkout').not(':has(.pe-checkout-blocked-wrap)').removeData('pe-blocked');
                     doBlock();
                 }
             );

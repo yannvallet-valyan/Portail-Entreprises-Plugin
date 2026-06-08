@@ -53,8 +53,11 @@ class PE_Core {
         // Enqueue des assets
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_assets'], 20);
 
-        // Ajout du champ centre de coût au checkout
+        // Ajout du champ centre de coût au checkout (rôles non-requester)
         add_filter('woocommerce_checkout_fields', [$this, 'add_cost_center_field']);
+
+        // Pour les requester : injecter le formulaire d'approbation (avec champs) directement via PHP
+        add_action('woocommerce_review_order_before_payment', [$this, 'render_requester_approval_form']);
 
         // Sauvegarde du centre de coût sur la commande
         add_action('woocommerce_checkout_create_order', [$this, 'save_cost_center_to_order'], 10, 2);
@@ -250,12 +253,12 @@ class PE_Core {
             true
         );
 
-        // Checkout blocking data for JS (WoodMart compatibility).
-        $checkout_blocked       = false;
-        $checkout_block_reason  = '';
-        $approval_button_html   = '';
+        // Checkout blocking data for JS — evaluated on ALL pages so the mini-cart is also updated.
+        $checkout_blocked      = false;
+        $checkout_block_reason = '';
+        $approval_button_html  = '';
 
-        if ((is_cart() || is_checkout()) && class_exists('PE_Budget_Manager')) {
+        if (is_user_logged_in() && class_exists('PE_Budget_Manager')) {
             $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
             if (true !== $reason) {
                 $checkout_blocked      = true;
@@ -282,6 +285,28 @@ class PE_Core {
                 'error'                    => __('Une erreur est survenue. Veuillez réessayer.', 'portail-entreprises'),
             ],
         ]);
+    }
+
+    /**
+     * Affiche le formulaire "Demander une approbation" sur la page checkout pour les requester.
+     * Remplace le bouton de paiement par le formulaire avec les champs centre de coût + référence.
+     */
+    public function render_requester_approval_form(): void {
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return;
+        }
+        $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
+        if (true === $reason) {
+            return;
+        }
+        // Affiche le formulaire directement via PHP — pas besoin du JS pour l'injection sur checkout
+        echo '<div class="pe-requester-checkout-notice" style="margin:16px 0;">';
+        echo '<p style="color:#664d03;background:#fff3cd;border:1px solid #ffc107;border-left:4px solid #ffc107;border-radius:6px;padding:12px 16px;margin:0 0 12px;">';
+        echo '<strong>⛔</strong> ' . esc_html($reason);
+        echo '</p>';
+        echo wp_kses_post(PE_Approval_Manager::get_instance()->get_approval_button_html('checkout'));
+        echo '</div>';
     }
 
     public function add_cost_center_field(array $fields): array {
