@@ -52,6 +52,9 @@ class PE_Installer {
             assigned_rep_id BIGINT UNSIGNED DEFAULT NULL,
             status ENUM('active','suspended') NOT NULL DEFAULT 'active',
             modules_enabled LONGTEXT NULL,
+            budget_monthly DECIMAL(12,2) DEFAULT NULL,
+            budget_annual DECIMAL(12,2) DEFAULT NULL,
+            budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -223,6 +226,14 @@ class PE_Installer {
             if (!self::tables_exist()) {
                 return;
             }
+        }
+
+        // Migrate: add company budget columns if missing (v1.2.0)
+        $col = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'budget_monthly'");
+        if (!$col) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_monthly DECIMAL(12,2) DEFAULT NULL");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_annual DECIMAL(12,2) DEFAULT NULL");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1");
         }
 
         self::update_db_version();

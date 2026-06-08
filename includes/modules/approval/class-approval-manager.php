@@ -356,6 +356,14 @@ class PE_Approval_Manager {
             if ($order) {
                 $order->update_status('processing', __('Commande approuvée par le responsable.', 'portail-entreprises'));
 
+                // Record budget usage on approval
+                $budget_mgr = PE_Budget_Manager::get_instance();
+                $requester_id = (int) $request->requester_id;
+                $req_company  = PE_Permissions::get_user_company($requester_id);
+                if ($req_company) {
+                    $budget_mgr->record_usage($requester_id, (int) $req_company->id, (float) $request->amount);
+                }
+
                 // Envoyer l'email WooCommerce "Commande en cours de traitement" au client.
                 $wc_emails = WC()->mailer()->get_emails();
                 if (isset($wc_emails['WC_Email_Customer_Processing_Order'])) {

@@ -216,6 +216,38 @@ class PE_Budget_Manager {
             }
         }
 
+        // Company-level budget check
+        $company_data = $wpdb->get_row($wpdb->prepare(
+            "SELECT budget_monthly, budget_annual, budget_block_enabled FROM {$wpdb->prefix}b2b_companies WHERE id = %d LIMIT 1",
+            (int) $user_data->company_id
+        ));
+        if ($company_data && (int) $company_data->budget_block_enabled === 1) {
+            if ($company_data->budget_monthly !== null) {
+                $co_spent_month = (float) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COALESCE(SUM(amount_spent),0) FROM {$wpdb->prefix}b2b_budget_usage WHERE company_id = %d AND period_month = %s",
+                    (int) $user_data->company_id, $period
+                ));
+                if (($co_spent_month + $amount) > (float) $company_data->budget_monthly) {
+                    return new \WP_Error('company_budget_monthly_exceeded',
+                        sprintf(__('Cette commande dépasse le budget mensuel de l\'entreprise. Budget restant : %s.', 'portail-entreprises'),
+                            wc_price(max(0, (float) $company_data->budget_monthly - $co_spent_month)))
+                    );
+                }
+            }
+            if ($company_data->budget_annual !== null) {
+                $co_spent_year = (float) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COALESCE(SUM(amount_spent),0) FROM {$wpdb->prefix}b2b_budget_usage WHERE company_id = %d AND period_year = %s",
+                    (int) $user_data->company_id, $year
+                ));
+                if (($co_spent_year + $amount) > (float) $company_data->budget_annual) {
+                    return new \WP_Error('company_budget_annual_exceeded',
+                        sprintf(__('Cette commande dépasse le budget annuel de l\'entreprise. Budget restant : %s.', 'portail-entreprises'),
+                            wc_price(max(0, (float) $company_data->budget_annual - $co_spent_year)))
+                    );
+                }
+            }
+        }
+
         return true;
     }
 
@@ -303,6 +335,28 @@ class PE_Budget_Manager {
                 ],
                 ['%d', '%d', '%s', '%s', '%f', '%d', '%s']
             );
+        }
+
+        // Company-level tracking (user_id = 0 = company aggregate)
+        $existing_co = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}b2b_budget_usage WHERE user_id = 0 AND company_id = %d AND period_month = %s LIMIT 1",
+            $company_id, $period
+        ));
+        if ($existing_co) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$wpdb->prefix}b2b_budget_usage SET amount_spent = amount_spent + %f, order_count = order_count + 1, updated_at = %s WHERE user_id = 0 AND company_id = %d AND period_month = %s",
+                $amount, current_time('mysql'), $company_id, $period
+            ));
+        } else {
+            $wpdb->insert($wpdb->prefix . 'b2b_budget_usage', [
+                'user_id'      => 0,
+                'company_id'   => $company_id,
+                'period_month' => $period,
+                'period_year'  => $year,
+                'amount_spent' => $amount,
+                'order_count'  => 1,
+                'updated_at'   => current_time('mysql'),
+            ], ['%d', '%d', '%s', '%s', '%f', '%d', '%s']);
         }
     }
 
@@ -396,6 +450,45 @@ class PE_Budget_Manager {
             'percent_month'       => ($user_data && $user_data->budget_monthly && $user_data->budget_monthly > 0)
                                         ? min(100, round($spent_month / (float) $user_data->budget_monthly * 100, 1))
                                         : null,
+        ];
+    }
+
+    /**
+     * Récupère les données de budget pour une entreprise entière.
+     */
+    public function get_company_usage_summary(int $company_id): array {
+        global $wpdb;
+        $period = date('Ym');
+        $year   = date('Y');
+        $company = $wpdb->get_row($wpdb->prepare(
+            "SELECT budget_monthly, budget_annual, budget_block_enabled FROM {$wpdb->prefix}b2b_companies WHERE id = %d LIMIT 1",
+            $company_id
+        ));
+        if (!$company) return ['budget_monthly' => null, 'budget_annual' => null, 'block_enabled' => true, 'spent_month' => 0.0, 'spent_year' => 0.0, 'remaining_month' => null, 'remaining_year' => null, 'percent_month' => null];
+
+        // Sum all usage for the company across all users
+        $spent_month = (float) $wpdb->get_var($wpdb->prepare(
+            "SELECT COALESCE(SUM(amount_spent),0) FROM {$wpdb->prefix}b2b_budget_usage WHERE company_id = %d AND period_month = %s",
+            $company_id, $period
+        ));
+        $spent_year = (float) $wpdb->get_var($wpdb->prepare(
+            "SELECT COALESCE(SUM(amount_spent),0) FROM {$wpdb->prefix}b2b_budget_usage WHERE company_id = %d AND period_year = %s",
+            $company_id, $year
+        ));
+
+        $budget_monthly = $company->budget_monthly !== null ? (float) $company->budget_monthly : null;
+        $budget_annual  = $company->budget_annual  !== null ? (float) $company->budget_annual  : null;
+
+        return [
+            'budget_monthly'  => $budget_monthly,
+            'budget_annual'   => $budget_annual,
+            'block_enabled'   => (bool) $company->budget_block_enabled,
+            'spent_month'     => $spent_month,
+            'spent_year'      => $spent_year,
+            'remaining_month' => $budget_monthly !== null ? max(0, $budget_monthly - $spent_month) : null,
+            'remaining_year'  => $budget_annual  !== null ? max(0, $budget_annual  - $spent_year)  : null,
+            'percent_month'   => ($budget_monthly && $budget_monthly > 0) ? min(100, round($spent_month / $budget_monthly * 100, 1)) : null,
+            'percent_year'    => ($budget_annual  && $budget_annual  > 0) ? min(100, round($spent_year  / $budget_annual  * 100, 1)) : null,
         ];
     }
 }

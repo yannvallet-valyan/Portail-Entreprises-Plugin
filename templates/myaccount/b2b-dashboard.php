@@ -18,6 +18,10 @@ if (!$company) {
 }
 
 $budget_summary  = $budget_mgr->get_usage_summary($user_id);
+$company_budget  = null;
+if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
+    $company_budget = $budget_mgr->get_company_usage_summary((int) $company->id);
+}
 $pending_count   = 0;
 $user_count      = 0;
 $recent_orders   = [];
@@ -29,15 +33,66 @@ if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
     $user_count       = count($company_users);
 }
 
-// Récupérer les 5 dernières commandes de l'utilisateur
-$recent_orders = wc_get_orders([
+$all_statuses  = ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'];
+$status_labels = wc_get_order_statuses();
+$is_manager    = in_array($role, ['company_admin', 'purchase_manager'], true);
+
+// Mes commandes (onglet 1 — toujours)
+$my_orders = wc_get_orders([
     'customer_id' => $user_id,
-    'limit'       => 5,
+    'limit'       => 10,
     'orderby'     => 'date',
     'order'       => 'DESC',
+    'status'      => $all_statuses,
 ]);
 
-$status_labels = wc_get_order_statuses();
+// Commandes des membres (onglet 2 — admins/managers uniquement)
+$member_orders      = [];
+$member_filter_user = 0;
+$member_filter_status = '';
+$company_members    = [];
+
+if ($is_manager) {
+    global $wpdb;
+    $company_user_ids = array_map('intval', $wpdb->get_col($wpdb->prepare(
+        "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+        (int) $company->id
+    )));
+    // Membres autres que soi
+    $other_ids = array_filter($company_user_ids, fn($id) => $id !== $user_id);
+
+    // Filtres GET
+    $member_filter_user   = isset($_GET['member_uid']) ? absint($_GET['member_uid']) : 0;
+    $member_filter_status = isset($_GET['member_status']) ? sanitize_key($_GET['member_status']) : '';
+
+    $query_ids = $member_filter_user && in_array($member_filter_user, $other_ids, true)
+        ? [$member_filter_user]
+        : (empty($other_ids) ? [-1] : $other_ids);
+
+    $member_query = [
+        'customer_id' => $query_ids,
+        'limit'       => 15,
+        'orderby'     => 'date',
+        'order'       => 'DESC',
+        'status'      => $all_statuses,
+    ];
+    if ($member_filter_status && 'wc-' . ltrim($member_filter_status, 'wc-') !== 'wc-') {
+        $member_query['status'] = ['wc-' . ltrim($member_filter_status, 'wc-')];
+    } elseif ($member_filter_status) {
+        $member_query['status'] = [$member_filter_status];
+    }
+    $member_orders = empty($other_ids) ? [] : wc_get_orders($member_query);
+
+    // Liste membres pour le filtre
+    foreach ($other_ids as $mid) {
+        $mu = get_userdata($mid);
+        if ($mu) $company_members[$mid] = $mu->display_name;
+    }
+}
+
+// Onglet actif (paramètre GET, défaut : mes-commandes)
+$active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $is_manager) ? 'membres' : 'mes-commandes';
+$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
 ?>
 
 <div class="pe-dashboard">
@@ -96,6 +151,43 @@ $status_labels = wc_get_order_statuses();
         </div>
         <?php endif; ?>
 
+        <?php if ($company_budget !== null) : ?>
+        <div class="pe-card pe-card-budget">
+            <div class="pe-card-icon">🏭</div>
+            <div class="pe-card-body">
+                <h3 class="pe-card-title"><?php esc_html_e('Budget entreprise', 'portail-entreprises'); ?></h3>
+                <?php if ($company_budget['budget_monthly'] === null && $company_budget['budget_annual'] === null) : ?>
+                <p class="pe-card-sub" style="font-size:0.85em;color:#999;">
+                    <a href="<?php echo esc_url(wc_get_account_endpoint_url('b2b-company')); ?>"><?php esc_html_e('Configurer →', 'portail-entreprises'); ?></a>
+                </p>
+                <?php endif; ?>
+                <?php if ($company_budget['budget_monthly'] !== null) : ?>
+                <p class="pe-card-sub" style="margin:0 0 4px;font-size:0.8em;color:#666;"><?php esc_html_e('Mensuel', 'portail-entreprises'); ?></p>
+                <div class="pe-progress-bar-container">
+                    <div class="pe-progress-bar" style="width:<?php echo esc_attr((string)($company_budget['percent_month'] ?? 0)); ?>%;"></div>
+                </div>
+                <p class="pe-card-meta">
+                    <?php echo wp_kses_post(wc_price($company_budget['spent_month'])); ?> / <?php echo wp_kses_post(wc_price($company_budget['budget_monthly'])); ?>
+                </p>
+                <p class="pe-card-sub"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_month']))); ?></p>
+                <?php endif; ?>
+                <?php if ($company_budget['budget_annual'] !== null) : ?>
+                <p class="pe-card-sub" style="margin:8px 0 4px;font-size:0.8em;color:#666;"><?php esc_html_e('Annuel', 'portail-entreprises'); ?></p>
+                <div class="pe-progress-bar-container">
+                    <div class="pe-progress-bar" style="width:<?php echo esc_attr((string)($company_budget['percent_year'] ?? 0)); ?>%;"></div>
+                </div>
+                <p class="pe-card-meta">
+                    <?php echo wp_kses_post(wc_price($company_budget['spent_year'])); ?> / <?php echo wp_kses_post(wc_price($company_budget['budget_annual'])); ?>
+                </p>
+                <p class="pe-card-sub"><?php printf(esc_html__('Restant : %s', 'portail-entreprises'), wp_kses_post(wc_price($company_budget['remaining_year']))); ?></p>
+                <?php endif; ?>
+                <?php if (!$company_budget['block_enabled']) : ?>
+                <p class="pe-card-sub" style="font-size:0.75em;color:#888;"><?php esc_html_e('(indicatif — blocage désactivé)', 'portail-entreprises'); ?></p>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Approbations en attente (pour les managers) -->
         <?php if (in_array($role, ['company_admin', 'purchase_manager'], true)) : ?>
         <div class="pe-card pe-card-approvals <?php echo $pending_count > 0 ? 'pe-card-alert' : ''; ?>">
@@ -127,16 +219,69 @@ $status_labels = wc_get_order_statuses();
 
     <!-- Commandes récentes -->
     <div class="pe-section">
-        <h3 class="pe-section-subtitle"><?php esc_html_e('Mes dernières commandes', 'portail-entreprises'); ?></h3>
+        <h3 class="pe-section-subtitle"><?php esc_html_e('Commandes', 'portail-entreprises'); ?></h3>
 
-        <?php if (empty($recent_orders)) : ?>
-            <p><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></p>
+        <?php if ($is_manager) : ?>
+        <!-- Onglets -->
+        <div class="pe-tabs" style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e5e7eb;">
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'mes-commandes', $tab_base_url)); ?>"
+               class="pe-tab <?php echo 'mes-commandes' === $active_tab ? 'pe-tab-active' : ''; ?>"
+               style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
+                <?php esc_html_e('Mes commandes', 'portail-entreprises'); ?>
+                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo count($my_orders); ?></span>
+            </a>
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url)); ?>"
+               class="pe-tab <?php echo 'membres' === $active_tab ? 'pe-tab-active' : ''; ?>"
+               style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'membres' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'membres' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
+                <?php esc_html_e('Commandes des membres', 'portail-entreprises'); ?>
+                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo count($member_orders); ?></span>
+            </a>
+        </div>
+        <?php endif; ?>
+
+        <?php if ('membres' === $active_tab && $is_manager) : ?>
+        <!-- Filtres membres -->
+        <form method="get" action="" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:14px 0 12px;">
+            <input type="hidden" name="orders_tab" value="membres" />
+            <select name="member_uid" class="pe-input" style="width:auto;min-width:160px;" onchange="this.form.submit()">
+                <option value="0"><?php esc_html_e('Tous les membres', 'portail-entreprises'); ?></option>
+                <?php foreach ($company_members as $mid => $mname) : ?>
+                <option value="<?php echo esc_attr($mid); ?>" <?php selected($member_filter_user, $mid); ?>>
+                    <?php echo esc_html($mname); ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <select name="member_status" class="pe-input" style="width:auto;min-width:160px;" onchange="this.form.submit()">
+                <option value=""><?php esc_html_e('Tous les statuts', 'portail-entreprises'); ?></option>
+                <?php foreach ($status_labels as $slug => $label) : ?>
+                <option value="<?php echo esc_attr($slug); ?>" <?php selected($member_filter_status, $slug); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php if ($member_filter_user || $member_filter_status) : ?>
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url)); ?>" style="font-size:0.85em;color:#6b7280;">
+                <?php esc_html_e('Réinitialiser', 'portail-entreprises'); ?>
+            </a>
+            <?php endif; ?>
+        </form>
+
+        <?php $display_orders = $member_orders; $show_member_col = true; ?>
+        <?php else : ?>
+        <?php $display_orders = $my_orders; $show_member_col = false; ?>
+        <?php endif; ?>
+
+        <?php if (empty($display_orders)) : ?>
+            <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></p>
         <?php else : ?>
         <div class="pe-table-responsive">
             <table class="pe-table pe-orders-table">
                 <thead>
                     <tr>
                         <th><?php esc_html_e('N° commande', 'portail-entreprises'); ?></th>
+                        <?php if ($show_member_col) : ?>
+                        <th><?php esc_html_e('Membre', 'portail-entreprises'); ?></th>
+                        <?php endif; ?>
                         <th><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
@@ -144,13 +289,21 @@ $status_labels = wc_get_order_statuses();
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($recent_orders as $order) : ?>
+                    <?php foreach ($display_orders as $order) : ?>
                     <tr>
                         <td>
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>">
                                 #<?php echo esc_html($order->get_order_number()); ?>
                             </a>
                         </td>
+                        <?php if ($show_member_col) : ?>
+                        <td>
+                            <?php
+                            $order_customer = get_userdata((int) $order->get_customer_id());
+                            echo esc_html($order_customer ? $order_customer->display_name : '—');
+                            ?>
+                        </td>
+                        <?php endif; ?>
                         <td><?php echo esc_html(wc_format_datetime($order->get_date_created())); ?></td>
                         <td>
                             <?php
