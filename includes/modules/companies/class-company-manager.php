@@ -21,6 +21,8 @@ class PE_Company_Manager {
     /** Cache de la remise entreprise de l'utilisateur courant (évite les requêtes répétées). */
     private ?float $current_user_discount = null;
     private bool $discount_resolved = false;
+    /** Bypass temporaire du filtre de prix B2B (pour lire le prix externe). */
+    private bool $bypass_discount = false;
 
     /**
      * Branche les filtres de prix B2B.
@@ -49,6 +51,77 @@ class PE_Company_Manager {
             $hash['pe_b2b_discount'] = $rate;
         }
         return $hash;
+    }
+
+    /* =========================================================
+       API PUBLIQUE — intégration plugins tiers (ex : module de devis)
+       ========================================================= */
+
+    /**
+     * Taux de remise (%) de l'entreprise de l'utilisateur courant (ou indiqué), ou 0.
+     * À utiliser par un plugin de devis pour afficher la remise en ligne séparée.
+     *
+     * @param int|null $user_id Utilisateur cible. Null = utilisateur courant.
+     */
+    public function get_discount_rate(?int $user_id = null): float {
+        if (null === $user_id) {
+            return $this->get_current_user_discount_rate();
+        }
+        if (!class_exists('PE_Permissions')) {
+            return 0.0;
+        }
+        $company = PE_Permissions::get_user_company($user_id);
+        return ($company && (float) $company->discount_rate > 0) ? (float) $company->discount_rate : 0.0;
+    }
+
+    /**
+     * Calcule la remise B2B applicable à un produit, en respectant la règle
+     * « pas de remise B2B si une remise existe déjà ».
+     *
+     * Retourne un tableau prêt à l'emploi pour afficher une LIGNE DE REMISE séparée :
+     *   [
+     *     'applies'         => bool,   // true si la remise B2B s'applique
+     *     'rate'            => float,  // taux en %
+     *     'regular_price'   => float,  // prix régulier (avant remise)
+     *     'discounted_price'=> float,  // prix après remise B2B
+     *     'discount_amount' => float,  // montant remisé par unité (regular - discounted)
+     *   ]
+     *
+     * @param \WC_Product $product Produit (ou variation).
+     * @param int|null    $user_id Utilisateur cible. Null = utilisateur courant.
+     */
+    public function get_product_discount(\WC_Product $product, ?int $user_id = null): array {
+        $rate    = $this->get_discount_rate($user_id);
+        $regular = (float) $product->get_regular_price();
+        $result  = [
+            'applies'          => false,
+            'rate'             => $rate,
+            'regular_price'    => $regular,
+            'discounted_price' => $regular,
+            'discount_amount'  => 0.0,
+        ];
+
+        if ($rate <= 0 || $regular <= 0) {
+            return $result;
+        }
+
+        // Prix actif tel que calculé par WooCommerce + plugins tiers (Taxonomy Discount, promos…),
+        // MAIS sans notre propre remise B2B (bypass temporaire).
+        $this->bypass_discount = true;
+        $external = (float) $product->get_price();
+        $this->bypass_discount = false;
+
+        // Une remise est déjà active (promo ou plugin tiers) → pas de remise B2B.
+        if ($external > 0 && $external < $regular - 0.0001) {
+            $result['discounted_price'] = $external;
+            return $result;
+        }
+
+        $discounted = round($regular * (1 - $rate / 100), wc_get_price_decimals());
+        $result['applies']          = true;
+        $result['discounted_price'] = $discounted;
+        $result['discount_amount']  = round($regular - $discounted, wc_get_price_decimals());
+        return $result;
     }
 
     /**
@@ -81,7 +154,7 @@ class PE_Company_Manager {
      * @return mixed
      */
     public function apply_b2b_discount($price, $product) {
-        if ('' === $price || null === $price) {
+        if ($this->bypass_discount || '' === $price || null === $price) {
             return $price;
         }
         $rate = $this->get_current_user_discount_rate();
