@@ -74,6 +74,7 @@ class PE_Core {
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
         PE_Magic_Link_Manager::get_instance()->init();
+        PE_Company_Manager::get_instance()->init_pricing();
 
         // Admin
         if (is_admin()) {

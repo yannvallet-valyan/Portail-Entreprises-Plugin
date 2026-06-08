@@ -18,6 +18,98 @@ class PE_Company_Manager {
         return self::$instance;
     }
 
+    /** Cache de la remise entreprise de l'utilisateur courant (évite les requêtes répétées). */
+    private ?float $current_user_discount = null;
+    private bool $discount_resolved = false;
+
+    /**
+     * Branche les filtres de prix B2B.
+     * Priorité tardive (999) pour s'exécuter APRÈS les plugins de remise tiers
+     * (ex : Taxonomy/Term and Role-based Discounts) : si une remise existe déjà,
+     * la remise entreprise B2B ne s'applique pas.
+     */
+    public function init_pricing(): void {
+        if (is_admin() && !wp_doing_ajax()) {
+            return;
+        }
+        add_filter('woocommerce_product_get_price', [$this, 'apply_b2b_discount'], 999, 2);
+        add_filter('woocommerce_product_variation_get_price', [$this, 'apply_b2b_discount'], 999, 2);
+        add_filter('woocommerce_variation_prices_price', [$this, 'apply_b2b_discount_variation'], 999, 3);
+
+        // Inclure la remise dans le hash de cache des prix de variation (prix par utilisateur).
+        add_filter('woocommerce_get_variation_prices_hash', [$this, 'add_discount_to_price_hash'], 999);
+    }
+
+    /**
+     * Ajoute la remise B2B au hash de cache des prix de variation.
+     */
+    public function add_discount_to_price_hash(array $hash): array {
+        $rate = $this->get_current_user_discount_rate();
+        if ($rate > 0) {
+            $hash['pe_b2b_discount'] = $rate;
+        }
+        return $hash;
+    }
+
+    /**
+     * Retourne le taux de remise (%) de l'entreprise de l'utilisateur courant, ou 0.
+     */
+    private function get_current_user_discount_rate(): float {
+        if ($this->discount_resolved) {
+            return (float) $this->current_user_discount;
+        }
+        $this->discount_resolved = true;
+        $this->current_user_discount = 0.0;
+
+        $user_id = get_current_user_id();
+        if (!$user_id || !class_exists('PE_Permissions')) {
+            return 0.0;
+        }
+        $company = PE_Permissions::get_user_company($user_id);
+        if ($company && (float) $company->discount_rate > 0) {
+            $this->current_user_discount = (float) $company->discount_rate;
+        }
+        return (float) $this->current_user_discount;
+    }
+
+    /**
+     * Applique la remise entreprise sur le prix d'un produit simple/variation.
+     * Ne s'applique que si aucune remise n'est déjà active (prix == prix régulier).
+     *
+     * @param mixed       $price   Prix courant (string|float).
+     * @param \WC_Product $product Produit.
+     * @return mixed
+     */
+    public function apply_b2b_discount($price, $product) {
+        if ('' === $price || null === $price) {
+            return $price;
+        }
+        $rate = $this->get_current_user_discount_rate();
+        if ($rate <= 0) {
+            return $price;
+        }
+
+        $regular = (float) $product->get_regular_price();
+        $current = (float) $price;
+        if ($regular <= 0) {
+            return $price;
+        }
+
+        // Une remise existe déjà (promo WooCommerce ou plugin tiers) → ne pas écraser.
+        if ($current < $regular - 0.0001) {
+            return $price;
+        }
+
+        return round($regular * (1 - $rate / 100), wc_get_price_decimals());
+    }
+
+    /**
+     * Variante pour le filtre woocommerce_variation_prices_price (3 args).
+     */
+    public function apply_b2b_discount_variation($price, $variation, $product) {
+        return $this->apply_b2b_discount($price, $variation);
+    }
+
     /**
      * Crée une nouvelle entreprise.
      *

@@ -670,6 +670,31 @@
     margin-top: 0;
 }
 
+/* Les champs ne doivent jamais déborder de leur carte. */
+.pe-admin-wrap .pe-form-card .form-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.pe-admin-wrap .pe-form-card .form-table th {
+    width: 40%;
+    word-wrap: break-word;
+}
+
+.pe-admin-wrap .pe-form-card .form-table td {
+    width: 60%;
+}
+
+.pe-admin-wrap .pe-form-card .form-table input[type="text"],
+.pe-admin-wrap .pe-form-card .form-table input[type="number"],
+.pe-admin-wrap .pe-form-card .form-table input.regular-text,
+.pe-admin-wrap .pe-form-card .form-table input.small-text,
+.pe-admin-wrap .pe-form-card .form-table select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 .pe-admin-wrap .pe-form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
