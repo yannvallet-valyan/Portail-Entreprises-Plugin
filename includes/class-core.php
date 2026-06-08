@@ -66,6 +66,9 @@ class PE_Core {
         // AJAX : édition de centre de coût + référence par les managers.
         add_action('wp_ajax_pe_update_order_b2b_meta', [$this, 'ajax_update_order_b2b_meta']);
 
+        // Accès managers aux commandes de leur entreprise (page view-order).
+        add_action('template_redirect', [$this, 'allow_manager_view_company_order'], 1);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -493,6 +496,66 @@ class PE_Core {
         }
 
         wp_send_json_success(['message' => __('Informations mises à jour.', 'portail-entreprises')]);
+    }
+
+    /**
+     * Permet aux managers (company_admin / purchase_manager) de consulter la
+     * page WooCommerce "view-order" pour les commandes appartenant à leur entreprise,
+     * sans modifier la commande ni ses données.
+     */
+    public function allow_manager_view_company_order(): void {
+        if (!isset($_GET['b2b_manager_view'])) {
+            return;
+        }
+
+        if (!is_wc_endpoint_url('view-order')) {
+            return;
+        }
+
+        $user_id = get_current_user_id();
+        if (!$user_id) {
+            return;
+        }
+
+        $role = PE_Permissions::get_user_b2b_role($user_id);
+        if (!in_array($role, ['company_admin', 'purchase_manager'], true)) {
+            return;
+        }
+
+        global $wp;
+        $order_id = absint($wp->query_vars['view-order'] ?? 0);
+        if (!$order_id) {
+            return;
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company) {
+            return;
+        }
+
+        $order_customer_id = (int) $order->get_customer_id();
+        if (!PE_Permissions::user_belongs_to_company($order_customer_id, (int) $company->id)) {
+            return;
+        }
+
+        // Injecter un filtre qui court-circuite la vérification de propriété dans wc_get_orders().
+        // WooCommerce appelle wc_get_orders(['customer' => $user_id, 'id' => $order_id])
+        // pour valider l'accès. On retourne directement l'objet commande si l'ID correspond.
+        add_filter('woocommerce_order_query', function ($result, $query) use ($order_id, $order) {
+            $args       = method_exists($query, 'get_query_vars') ? $query->get_query_vars() : [];
+            $queried_id = (int) ($args['id'] ?? 0);
+
+            if ($queried_id === $order_id && isset($args['customer'])) {
+                return [$order];
+            }
+
+            return $result;
+        }, 10, 2);
     }
 
     /**

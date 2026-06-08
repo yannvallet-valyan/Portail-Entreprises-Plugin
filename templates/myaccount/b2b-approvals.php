@@ -188,8 +188,12 @@ $wc_status_labels = wc_get_order_statuses();
                                     data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
                                 <?php esc_html_e('Rejeter', 'portail-entreprises'); ?>
                             </button>
-                            <?php else : ?>
-                            <span class="pe-text-muted">—</span>
+                            <?php endif; ?>
+                            <?php if ($order) : ?>
+                            <a href="<?php echo esc_url(add_query_arg('b2b_manager_view', '1', $order->get_view_order_url())); ?>"
+                               class="pe-btn pe-btn-sm pe-btn-secondary" style="margin-top:4px;">
+                                <?php esc_html_e('Voir', 'portail-entreprises'); ?>
+                            </a>
                             <?php endif; ?>
                         </td>
                         <?php endif; ?>
