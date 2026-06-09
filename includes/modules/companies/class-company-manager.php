@@ -604,6 +604,8 @@ class PE_Company_Manager {
             ['name' => $company->name]
         );
 
+        do_action( 'pe_company_deleted', $company_id );
+
         return true;
     }
 
