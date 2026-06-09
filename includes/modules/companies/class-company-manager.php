@@ -188,9 +188,49 @@ class PE_Company_Manager {
             );
 
             do_action( 'pe_company_updated', $id );
+
+            if (isset($update_data['billing_address'])) {
+                $this->sync_billing_address_to_members($id);
+            }
         }
 
         return false !== $result;
+    }
+
+    /**
+     * Synchronise l'adresse de facturation de la société dans le profil WooCommerce d'un membre.
+     * Appelée à l'ajout d'un membre et lors de la mise à jour de l'adresse par l'admin société.
+     */
+    public function sync_billing_address_to_user(int $user_id, int $company_id): void {
+        $company = $this->get_company($company_id);
+        if (!$company) {
+            return;
+        }
+
+        $billing = (array) json_decode($company->billing_address, true);
+
+        $meta_map = [
+            'billing_address_1' => $billing['address_1'] ?? '',
+            'billing_address_2' => $billing['address_2'] ?? '',
+            'billing_city'      => $billing['city'] ?? '',
+            'billing_postcode'  => $billing['postcode'] ?? '',
+            'billing_country'   => $billing['country'] ?? 'FR',
+            'billing_company'   => $company->name,
+        ];
+
+        foreach ($meta_map as $meta_key => $meta_value) {
+            update_user_meta($user_id, $meta_key, $meta_value);
+        }
+    }
+
+    /**
+     * Synchronise l'adresse de facturation de la société vers tous ses membres.
+     */
+    public function sync_billing_address_to_members(int $company_id): void {
+        $users = $this->get_company_users($company_id);
+        foreach ($users as $user) {
+            $this->sync_billing_address_to_user((int) $user->user_id, $company_id);
+        }
     }
 
     /**
@@ -259,6 +299,7 @@ class PE_Company_Manager {
 
         if (false !== $result) {
             PE_Permissions::flush_user_cache($user_id);
+            $this->sync_billing_address_to_user($user_id, $company_id);
 
             PE_Audit_Log::get_instance()->log(
                 get_current_user_id(),
