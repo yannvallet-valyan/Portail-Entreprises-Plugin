@@ -154,6 +154,10 @@ class PE_Admin {
             ],
         ];
 
+        if (class_exists('TDW_B2B_Taxonomies')) {
+            $data['tdw_profile_slug'] = sanitize_key(wp_unslash($_POST['tdw_profile_slug'] ?? ''));
+        }
+
         $result = PE_Company_Manager::get_instance()->create_company($data);
 
         if (is_wp_error($result)) {
@@ -198,6 +202,10 @@ class PE_Admin {
                 'country'   => sanitize_text_field(wp_unslash($_POST['billing_country'] ?? '')),
             ],
         ];
+
+        if (class_exists('TDW_B2B_Taxonomies')) {
+            $data['tdw_profile_slug'] = sanitize_key(wp_unslash($_POST['tdw_profile_slug'] ?? ''));
+        }
 
         $result = PE_Company_Manager::get_instance()->update_company($company_id, $data);
 

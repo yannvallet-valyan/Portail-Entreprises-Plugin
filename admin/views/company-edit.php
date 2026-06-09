@@ -140,6 +140,25 @@ $all_roles = PE_Permissions::get_roles();
                                    min="0" max="100" step="0.01"
                                    value="<?php echo esc_attr($company->discount_rate ?? '0'); ?>" /></td>
                     </tr>
+                    <?php if (class_exists('TDW_B2B_Taxonomies')) :
+                        $tdw_profiles        = TDW_B2B_Taxonomies::get_profiles();
+                        $current_tdw_profile = $company ? (string) ($company->tdw_profile_slug ?? '') : '';
+                    ?>
+                    <tr>
+                        <th><label for="tdw_profile_slug"><?php esc_html_e('Profil de remise TDW', 'portail-entreprises'); ?></label></th>
+                        <td>
+                            <select id="tdw_profile_slug" name="tdw_profile_slug">
+                                <option value=""><?php esc_html_e('— Aucun profil —', 'portail-entreprises'); ?></option>
+                                <?php foreach ($tdw_profiles as $tdw_p) : ?>
+                                <option value="<?php echo esc_attr($tdw_p['slug']); ?>" <?php selected($current_tdw_profile, $tdw_p['slug']); ?>>
+                                    <?php echo esc_html($tdw_p['name']); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php esc_html_e('Les règles de remise du profil s\'appliquent aux utilisateurs de cette société.', 'portail-entreprises'); ?></p>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <tr>
                         <th><label for="credit_limit"><?php esc_html_e('Plafond de crédit (€)', 'portail-entreprises'); ?></label></th>
                         <td><input type="number" id="credit_limit" name="credit_limit" class="regular-text"
@@ -406,6 +425,7 @@ $all_roles = PE_Permissions::get_roles();
                         <td><input type="text" id="pe-inv-firstname" class="regular-text" /></td>
                     </tr>
                     <tr>
+
                         <th><label for="pe-inv-lastname"><?php esc_html_e('Nom', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="pe-inv-lastname" class="regular-text" /></td>
                     </tr>
@@ -549,7 +569,7 @@ $all_roles = PE_Permissions::get_roles();
                         setTimeout(function() { location.reload(); }, 1500);
                     } else {
                         $('#pe-invite-msg').css('color', '#b32d2e').text(res.data.message);
-                        $btn.prop('disabled', false).text('<?php echo esc_js(__("Inviter et envoyer l'e-mail", 'portail-entreprises')); ?>');
+                        $btn.prop('disabled', false).text('<?php echo esc_js(__('Inviter et envoyer l\'e-mail', 'portail-entreprises')); ?>');
                     }
                 });
             });
