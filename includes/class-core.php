@@ -70,6 +70,10 @@ class PE_Core {
         add_action('woocommerce_account_b2b-order_endpoint', [$this, 'render_b2b_order']);
         add_filter('woocommerce_endpoint_b2b-order_title', fn() => __('Détail de la commande', 'portail-entreprises'));
 
+        // Adresse de facturation société : pré-remplissage checkout + protection du profil
+        add_filter('woocommerce_checkout_get_value', [$this, 'prefill_checkout_billing_from_company'], 10, 2);
+        add_action('woocommerce_checkout_update_customer', [$this, 'restore_company_billing_after_checkout'], 10, 2);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -542,6 +546,87 @@ class PE_Core {
                 'notes'    => wc_get_order_notes(['order_id' => $order_id, 'type' => 'customer']),
             ]
         );
+    }
+
+    /**
+     * Pré-remplit les champs de facturation au checkout avec l'adresse de la société.
+     * Priorité sur l'adresse éventuellement stockée dans le profil personnel du membre.
+     *
+     * @param mixed  $value Valeur par défaut (null si aucune).
+     * @param string $input Nom du champ checkout (ex : billing_address_1).
+     * @return mixed
+     */
+    public function prefill_checkout_billing_from_company($value, string $input) {
+        static $billing_fields = [
+            'billing_address_1',
+            'billing_address_2',
+            'billing_city',
+            'billing_postcode',
+            'billing_country',
+            'billing_company',
+        ];
+
+        if (!in_array($input, $billing_fields, true)) {
+            return $value;
+        }
+
+        // Ne pas écraser les valeurs postées (rechargement après erreur de validation)
+        if (!empty($_POST)) {
+            return $value;
+        }
+
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return $value;
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company) {
+            return $value;
+        }
+
+        $billing = (array) json_decode($company->billing_address, true);
+
+        $field_map = [
+            'billing_address_1' => $billing['address_1'] ?? '',
+            'billing_address_2' => $billing['address_2'] ?? '',
+            'billing_city'      => $billing['city'] ?? '',
+            'billing_postcode'  => $billing['postcode'] ?? '',
+            'billing_country'   => $billing['country'] ?? 'FR',
+            'billing_company'   => $company->name,
+        ];
+
+        return $field_map[$input] ?? $value;
+    }
+
+    /**
+     * Restaure l'adresse de facturation de la société dans le profil WooCommerce du membre
+     * après un passage en caisse, afin que la commande garde l'adresse saisie par le membre
+     * mais que le profil conserve toujours l'adresse officielle de la société.
+     *
+     * Le hook s'exécute avant $customer->save() : WooCommerce enregistre alors l'adresse
+     * société en user meta, tandis que la commande (créée plus tard depuis $_POST) conserve
+     * l'adresse que le membre a réellement saisie.
+     */
+    public function restore_company_billing_after_checkout(\WC_Customer $customer, array $data): void {
+        $user_id = $customer->get_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return;
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company) {
+            return;
+        }
+
+        $billing = (array) json_decode($company->billing_address, true);
+
+        $customer->set_billing_address_1($billing['address_1'] ?? '');
+        $customer->set_billing_address_2($billing['address_2'] ?? '');
+        $customer->set_billing_city($billing['city'] ?? '');
+        $customer->set_billing_postcode($billing['postcode'] ?? '');
+        $customer->set_billing_country($billing['country'] ?? 'FR');
+        $customer->set_billing_company($company->name);
     }
 
     /**
