@@ -692,30 +692,67 @@ $all_roles = PE_Permissions::get_roles();
                 $details    = [];
 
                 if ($log_entry->action === 'update_company' && !empty($log_data)) {
-                    foreach ($log_data as $field => $value) {
-                        $label = $audit_field_labels[$field] ?? $field;
+                    foreach ($log_data as $field => $change) {
+                        $label   = $audit_field_labels[$field] ?? $field;
+                        $is_diff = is_array($change) && array_key_exists('from', $change) && array_key_exists('to', $change);
+                        $from    = $is_diff ? $change['from'] : null;
+                        $to      = $is_diff ? $change['to'] : $change;
+
                         if ($field === 'billing_address') {
-                            $details[] = $label;
+                            $details[] = $label . ' modifiée';
                         } elseif ($field === 'modules_enabled') {
-                            $modules = is_string($value) ? (array) json_decode($value, true) : (array) $value;
-                            $details[] = $label . ' : ' . (empty($modules) ? __('aucun', 'portail-entreprises') : implode(', ', $modules));
-                        } elseif ($field === 'status') {
-                            $details[] = $label . ' → ' . ($audit_status_labels[$value] ?? $value);
-                        } elseif ($field === 'discount_rate') {
-                            $details[] = $label . ' → ' . $value . '%';
-                        } elseif ($field === 'credit_limit') {
-                            $details[] = $label . ' → ' . number_format((float) $value, 2, ',', ' ') . ' €';
-                        } elseif ($field === 'payment_terms') {
-                            $details[] = $label . ' → ' . $value . ' jours';
-                        } elseif ($field === 'assigned_rep_id') {
-                            if (empty($value)) {
-                                $details[] = $label . ' → ' . __('non assigné', 'portail-entreprises');
+                            $new_mods = is_string($to) ? (array) json_decode((string) $to, true) : (array) $to;
+                            if ($is_diff) {
+                                $old_mods  = is_string($from) ? (array) json_decode((string) $from, true) : (array) $from;
+                                $details[] = $label . ' : ' . (empty($old_mods) ? __('aucun', 'portail-entreprises') : implode(', ', $old_mods)) . ' → ' . (empty($new_mods) ? __('aucun', 'portail-entreprises') : implode(', ', $new_mods));
                             } else {
-                                $rep = get_userdata((int) $value);
-                                $details[] = $label . ' → ' . ($rep ? $rep->display_name : '#' . $value);
+                                $details[] = $label . ' : ' . (empty($new_mods) ? __('aucun', 'portail-entreprises') : implode(', ', $new_mods));
+                            }
+                        } elseif ($field === 'status') {
+                            $lbl_to = $audit_status_labels[$to] ?? $to;
+                            if ($is_diff && $from !== '') {
+                                $details[] = $label . ' : ' . ($audit_status_labels[$from] ?? $from) . ' → ' . $lbl_to;
+                            } else {
+                                $details[] = $label . ' → ' . $lbl_to;
+                            }
+                        } elseif ($field === 'discount_rate') {
+                            if ($is_diff && $from !== '') {
+                                $details[] = $label . ' : ' . $from . '% → ' . $to . '%';
+                            } else {
+                                $details[] = $label . ' → ' . $to . '%';
+                            }
+                        } elseif ($field === 'credit_limit') {
+                            $fmt_to = number_format((float) $to, 2, ',', ' ') . ' €';
+                            if ($is_diff && $from !== '') {
+                                $details[] = $label . ' : ' . number_format((float) $from, 2, ',', ' ') . ' € → ' . $fmt_to;
+                            } else {
+                                $details[] = $label . ' → ' . $fmt_to;
+                            }
+                        } elseif ($field === 'payment_terms') {
+                            if ($is_diff && $from !== '') {
+                                $details[] = $label . ' : ' . $from . ' → ' . $to . ' jours';
+                            } else {
+                                $details[] = $label . ' → ' . $to . ' jours';
+                            }
+                        } elseif ($field === 'assigned_rep_id') {
+                            $fmt_rep = function($v) {
+                                if (empty($v)) {
+                                    return __('non assigné', 'portail-entreprises');
+                                }
+                                $u = get_userdata((int) $v);
+                                return $u ? $u->display_name : '#' . $v;
+                            };
+                            if ($is_diff && $from !== '') {
+                                $details[] = $label . ' : ' . $fmt_rep($from) . ' → ' . $fmt_rep($to);
+                            } else {
+                                $details[] = $label . ' → ' . $fmt_rep($to);
                             }
                         } else {
-                            $details[] = $label . ' → ' . $value;
+                            if ($is_diff && (string) $from !== '') {
+                                $details[] = $label . ' : ' . $from . ' → ' . $to;
+                            } else {
+                                $details[] = $label . ' → ' . $to;
+                            }
                         }
                     }
                 } elseif (!empty($log_data['email'])) {
