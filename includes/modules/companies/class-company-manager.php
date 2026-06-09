@@ -177,6 +177,8 @@ class PE_Company_Manager {
             return false;
         }
 
+        $company_before = $this->get_company($id);
+
         $result = $wpdb->update(
             $wpdb->prefix . 'b2b_companies',
             $update_data,
@@ -188,14 +190,43 @@ class PE_Company_Manager {
         if (false !== $result) {
             wp_cache_delete('pe_company_' . $id, 'portail-entreprises');
 
-            PE_Audit_Log::get_instance()->log(
-                get_current_user_id(),
-                $id,
-                'update_company',
-                'company',
-                $id,
-                $update_data
-            );
+            $changes = [];
+            foreach ($update_data as $field => $new_val) {
+                $old_raw = ($company_before && property_exists($company_before, $field)) ? $company_before->$field : null;
+
+                if (in_array($field, ['billing_address', 'modules_enabled'], true)) {
+                    if (json_decode((string) $old_raw, true) !== json_decode((string) $new_val, true)) {
+                        $changes[$field] = ['from' => $old_raw, 'to' => $new_val];
+                    }
+                } elseif (in_array($field, ['discount_rate', 'credit_limit'], true)) {
+                    if (abs((float) $old_raw - (float) $new_val) > 0.001) {
+                        $changes[$field] = ['from' => (string) $old_raw, 'to' => (string) $new_val];
+                    }
+                } elseif ($field === 'payment_terms') {
+                    if ((int) $old_raw !== (int) $new_val) {
+                        $changes[$field] = ['from' => (string) (int) $old_raw, 'to' => (string) (int) $new_val];
+                    }
+                } elseif ($field === 'assigned_rep_id') {
+                    if ((int) $old_raw !== (int) $new_val) {
+                        $changes[$field] = ['from' => $old_raw ? (string) (int) $old_raw : '', 'to' => $new_val ? (string) (int) $new_val : ''];
+                    }
+                } else {
+                    if ((string) $old_raw !== (string) $new_val) {
+                        $changes[$field] = ['from' => (string) $old_raw, 'to' => (string) $new_val];
+                    }
+                }
+            }
+
+            if (!empty($changes)) {
+                PE_Audit_Log::get_instance()->log(
+                    get_current_user_id(),
+                    $id,
+                    'update_company',
+                    'company',
+                    $id,
+                    $changes
+                );
+            }
 
             do_action( 'pe_company_updated', $id );
 
