@@ -588,8 +588,9 @@ $all_roles = PE_Permissions::get_roles();
         <?php if (empty($company_orders)) : ?>
             <p><?php esc_html_e('Aucune commande trouvée pour cette société.', 'portail-entreprises'); ?></p>
         <?php else : ?>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
+        <div style="max-height:380px; overflow-y:auto; border:1px solid #e2e4e7; border-radius:4px;">
+        <table class="wp-list-table widefat fixed striped" style="margin:0; border:none;">
+            <thead style="position:sticky; top:0; background:#f9f9f9; z-index:1;">
                 <tr>
                     <th style="width:100px;"><?php esc_html_e('Commande', 'portail-entreprises'); ?></th>
                     <th><?php esc_html_e('Client', 'portail-entreprises'); ?></th>
@@ -616,6 +617,7 @@ $all_roles = PE_Permissions::get_roles();
                 <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
         <?php if (20 === count($company_orders)) : ?>
         <p style="margin-top:8px;">
             <a href="<?php echo esc_url(admin_url('edit.php?post_type=shop_order')); ?>">
@@ -632,7 +634,7 @@ $all_roles = PE_Permissions::get_roles();
         <?php
         $audit_logs = PE_Audit_Log::get_instance()->get_logs([
             'company_id' => $company_id,
-            'per_page'   => 50,
+            'per_page'   => 25,
         ]);
         $audit_action_labels = [
             'create_company'           => __('Société créée', 'portail-entreprises'),
@@ -649,14 +651,34 @@ $all_roles = PE_Permissions::get_roles();
             'save_approval_rule'       => __('Règle d\'approbation modifiée', 'portail-entreprises'),
         ];
         ?>
+        <?php
+        $audit_field_labels = [
+            'name'             => __('Nom', 'portail-entreprises'),
+            'siret'            => __('SIRET', 'portail-entreprises'),
+            'vat_number'       => __('N° TVA', 'portail-entreprises'),
+            'billing_address'  => __('Adresse de facturation', 'portail-entreprises'),
+            'discount_rate'    => __('Remise', 'portail-entreprises'),
+            'credit_limit'     => __('Limite de crédit', 'portail-entreprises'),
+            'payment_terms'    => __('Délai de paiement', 'portail-entreprises'),
+            'assigned_rep_id'  => __('Commercial', 'portail-entreprises'),
+            'status'           => __('Statut', 'portail-entreprises'),
+            'modules_enabled'  => __('Modules', 'portail-entreprises'),
+            'tdw_profile_slug' => __('Profil TDW', 'portail-entreprises'),
+        ];
+        $audit_status_labels = [
+            'active'    => __('Actif', 'portail-entreprises'),
+            'suspended' => __('Suspendu', 'portail-entreprises'),
+        ];
+        ?>
         <?php if (empty($audit_logs)) : ?>
             <p><?php esc_html_e('Aucune activité enregistrée pour cette société.', 'portail-entreprises'); ?></p>
         <?php else : ?>
-        <table class="wp-list-table widefat fixed striped" style="font-size:13px;">
-            <thead>
+        <div style="max-height:420px; overflow-y:auto; border:1px solid #e2e4e7; border-radius:4px;">
+        <table class="wp-list-table widefat fixed striped" style="font-size:13px; margin:0; border:none;">
+            <thead style="position:sticky; top:0; background:#f9f9f9; z-index:1;">
                 <tr>
                     <th style="width:150px;"><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
-                    <th style="width:180px;"><?php esc_html_e('Utilisateur', 'portail-entreprises'); ?></th>
+                    <th style="width:150px;"><?php esc_html_e('Utilisateur', 'portail-entreprises'); ?></th>
                     <th><?php esc_html_e('Action', 'portail-entreprises'); ?></th>
                     <th style="width:120px;"><?php esc_html_e('Adresse IP', 'portail-entreprises'); ?></th>
                 </tr>
@@ -668,11 +690,39 @@ $all_roles = PE_Permissions::get_roles();
                 $log_data   = $log_entry->data ? (array) json_decode($log_entry->data, true) : [];
                 $action_lbl = $audit_action_labels[$log_entry->action] ?? esc_html($log_entry->action);
                 $details    = [];
-                if (!empty($log_data['email'])) {
+
+                if ($log_entry->action === 'update_company' && !empty($log_data)) {
+                    foreach ($log_data as $field => $value) {
+                        $label = $audit_field_labels[$field] ?? $field;
+                        if ($field === 'billing_address') {
+                            $details[] = $label;
+                        } elseif ($field === 'modules_enabled') {
+                            $modules = is_string($value) ? (array) json_decode($value, true) : (array) $value;
+                            $details[] = $label . ' : ' . (empty($modules) ? __('aucun', 'portail-entreprises') : implode(', ', $modules));
+                        } elseif ($field === 'status') {
+                            $details[] = $label . ' → ' . ($audit_status_labels[$value] ?? $value);
+                        } elseif ($field === 'discount_rate') {
+                            $details[] = $label . ' → ' . $value . '%';
+                        } elseif ($field === 'credit_limit') {
+                            $details[] = $label . ' → ' . number_format((float) $value, 2, ',', ' ') . ' €';
+                        } elseif ($field === 'payment_terms') {
+                            $details[] = $label . ' → ' . $value . ' jours';
+                        } elseif ($field === 'assigned_rep_id') {
+                            if (empty($value)) {
+                                $details[] = $label . ' → ' . __('non assigné', 'portail-entreprises');
+                            } else {
+                                $rep = get_userdata((int) $value);
+                                $details[] = $label . ' → ' . ($rep ? $rep->display_name : '#' . $value);
+                            }
+                        } else {
+                            $details[] = $label . ' → ' . $value;
+                        }
+                    }
+                } elseif (!empty($log_data['email'])) {
                     $details[] = $log_data['email'];
-                }
-                if (!empty($log_data['role']) && isset($all_roles[$log_data['role']])) {
-                    $details[] = $all_roles[$log_data['role']];
+                    if (!empty($log_data['role']) && isset($all_roles[$log_data['role']])) {
+                        $details[] = $all_roles[$log_data['role']];
+                    }
                 }
                 ?>
                 <tr>
@@ -689,7 +739,7 @@ $all_roles = PE_Permissions::get_roles();
                     <td>
                         <?php echo esc_html($action_lbl); ?>
                         <?php if (!empty($details)) : ?>
-                            <small style="color:#888;"> — <?php echo esc_html(implode(', ', $details)); ?></small>
+                            <small style="color:#666;"> — <?php echo esc_html(implode(' | ', $details)); ?></small>
                         <?php endif; ?>
                     </td>
                     <td><?php echo esc_html($log_entry->ip_address ?: '—'); ?></td>
@@ -697,6 +747,7 @@ $all_roles = PE_Permissions::get_roles();
                 <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
         <?php endif; ?>
     </div>
 

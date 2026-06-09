@@ -646,23 +646,16 @@ class PE_Core {
             return [];
         }
 
-        $placeholders = implode(',', array_fill(0, count($user_ids), '%d'));
-        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-        $rows = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT p.ID, p.post_status, p.post_date, pm_customer.meta_value AS customer_id
-                 FROM {$wpdb->posts} p
-                 INNER JOIN {$wpdb->postmeta} pm_customer ON pm_customer.post_id = p.ID AND pm_customer.meta_key = '_customer_user'
-                 WHERE p.post_type = 'shop_order'
-                   AND CAST(pm_customer.meta_value AS UNSIGNED) IN ($placeholders)
-                 ORDER BY p.post_date DESC
-                 LIMIT %d",
-                ...array_merge(array_map('intval', $user_ids), [$limit])
-            )
-        );
+        $user_ids = array_map('intval', $user_ids);
 
-        $order_ids = array_column($rows ?: [], 'ID');
+        $orders = wc_get_orders([
+            'customer' => $user_ids,
+            'limit'    => $limit,
+            'orderby'  => 'date',
+            'order'    => 'DESC',
+            'type'     => 'shop_order',
+        ]);
 
-        return array_filter(array_map('wc_get_order', $order_ids));
+        return $orders ?: [];
     }
 }
