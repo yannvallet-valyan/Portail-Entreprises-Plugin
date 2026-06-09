@@ -21,6 +21,8 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_create_cost_center', [$this, 'ajax_admin_create_cost_center']);
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
+        add_action('wp_ajax_pe_admin_search_users', [$this, 'ajax_admin_search_users']);
+        add_action('wp_ajax_pe_admin_invite_user_to_company', [$this, 'ajax_admin_invite_user_to_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
         add_action('admin_post_pe_update_company', [$this, 'handle_post_update_company']);
@@ -505,7 +507,13 @@ class PE_Admin {
             wp_send_json_error(['message' => __('Paramètres invalides.', 'portail-entreprises')]);
         }
 
-        $result = PE_Company_Manager::get_instance()->add_user_to_company($user_id, $company_id, $role);
+        $opts = [
+            'budget_monthly'   => isset($_POST['budget_monthly']) && $_POST['budget_monthly'] !== '' ? (float) $_POST['budget_monthly'] : null,
+            'budget_annual'    => isset($_POST['budget_annual']) && $_POST['budget_annual'] !== '' ? (float) $_POST['budget_annual'] : null,
+            'budget_per_order' => isset($_POST['budget_per_order']) && $_POST['budget_per_order'] !== '' ? (float) $_POST['budget_per_order'] : null,
+        ];
+
+        $result = PE_Company_Manager::get_instance()->add_user_to_company($user_id, $company_id, $role, $opts);
 
         if ($result) {
             PE_User_Manager::get_instance()->enable_b2b($user_id);
@@ -633,5 +641,82 @@ class PE_Admin {
         } else {
             wp_send_json_error(['message' => __('Erreur lors de la suppression.', 'portail-entreprises')]);
         }
+    }
+
+    public function ajax_admin_search_users(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $search     = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+
+        if (strlen($search) < 2) {
+            wp_send_json_success(['users' => []]);
+        }
+
+        $existing_ids = [];
+        if ($company_id) {
+            global $wpdb;
+            $existing_ids = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+                    $company_id
+                )
+            );
+        }
+
+        $users = get_users([
+            'search'         => '*' . $search . '*',
+            'search_columns' => ['user_login', 'user_email', 'display_name'],
+            'exclude'        => array_map('intval', $existing_ids),
+            'number'         => 10,
+            'fields'         => ['ID', 'display_name', 'user_email'],
+        ]);
+
+        $results = array_map(fn($u) => [
+            'id'    => (int) $u->ID,
+            'name'  => $u->display_name,
+            'email' => $u->user_email,
+        ], $users);
+
+        wp_send_json_success(['users' => array_values($results)]);
+    }
+
+    public function ajax_admin_invite_user_to_company(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+        $email      = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
+        $role       = isset($_POST['role']) ? sanitize_key($_POST['role']) : 'buyer';
+
+        if (!$company_id || !$email) {
+            wp_send_json_error(['message' => __('Paramètres invalides.', 'portail-entreprises')]);
+        }
+
+        $data = [
+            'email'            => $email,
+            'first_name'       => isset($_POST['first_name']) ? sanitize_text_field(wp_unslash($_POST['first_name'])) : '',
+            'last_name'        => isset($_POST['last_name']) ? sanitize_text_field(wp_unslash($_POST['last_name'])) : '',
+            'budget_monthly'   => isset($_POST['budget_monthly']) && $_POST['budget_monthly'] !== '' ? (float) $_POST['budget_monthly'] : null,
+            'budget_annual'    => isset($_POST['budget_annual']) && $_POST['budget_annual'] !== '' ? (float) $_POST['budget_annual'] : null,
+            'budget_per_order' => isset($_POST['budget_per_order']) && $_POST['budget_per_order'] !== '' ? (float) $_POST['budget_per_order'] : null,
+        ];
+
+        $result = PE_User_Manager::get_instance()->create_sub_account($data, $company_id, $role);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        wp_send_json_success([
+            'message' => __('Invitation envoyée. L\'utilisateur recevra ses identifiants par e-mail.', 'portail-entreprises'),
+        ]);
     }
 }

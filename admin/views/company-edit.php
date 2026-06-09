@@ -17,8 +17,6 @@ if (!$is_new && !$company) {
 $billing_address  = $company ? (array) json_decode($company->billing_address, true) : [];
 $modules_enabled  = $company ? (array) json_decode($company->modules_enabled, true) : [];
 $company_users    = $is_new ? [] : $manager->get_company_users($company_id);
-$agencies         = $is_new ? [] : $manager->get_agencies($company_id);
-$cost_centers     = $is_new ? [] : $manager->get_cost_centers($company_id);
 $approval_rules   = $is_new ? [] : $manager->get_approval_rules($company_id);
 
 $nonce_action  = $is_new ? 'pe_create_company' : 'pe_save_company_' . $company_id;
@@ -27,7 +25,6 @@ $form_action   = $is_new ? 'pe_create_company' : 'pe_update_company';
 $available_modules = [
     'approvals' => __('Workflow d\'approbation', 'portail-entreprises'),
     'budgets'   => __('Gestion des budgets', 'portail-entreprises'),
-    'agencies'  => __('Agences', 'portail-entreprises'),
 ];
 
 $all_roles = PE_Permissions::get_roles();
@@ -182,67 +179,6 @@ $all_roles = PE_Permissions::get_roles();
 
     <?php if (!$is_new) : ?>
 
-    <!-- Section Agences -->
-    <div class="pe-form-card" style="margin-top:20px;">
-        <h2><?php esc_html_e('Agences', 'portail-entreprises'); ?></h2>
-        <?php if (empty($agencies)) : ?>
-            <p><?php esc_html_e('Aucune agence enregistrée.', 'portail-entreprises'); ?></p>
-        <?php else : ?>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th><?php esc_html_e('Nom', 'portail-entreprises'); ?></th>
-                    <th><?php esc_html_e('Adresse', 'portail-entreprises'); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($agencies as $agency) : ?>
-                <?php $addr = (array) json_decode($agency->address, true); ?>
-                <tr>
-                    <td><?php echo esc_html($agency->name); ?></td>
-                    <td><?php echo esc_html(implode(', ', array_filter($addr))); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php endif; ?>
-    </div>
-
-    <!-- Section Centres de coût -->
-    <div class="pe-form-card" style="margin-top:20px;">
-        <h2><?php esc_html_e('Centres de coût', 'portail-entreprises'); ?></h2>
-        <?php if (empty($cost_centers)) : ?>
-            <p><?php esc_html_e('Aucun centre de coût enregistré.', 'portail-entreprises'); ?></p>
-        <?php else : ?>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th><?php esc_html_e('Nom', 'portail-entreprises'); ?></th>
-                    <th><?php esc_html_e('Code', 'portail-entreprises'); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($cost_centers as $cc) : ?>
-                <tr>
-                    <td><?php echo esc_html($cc->name); ?></td>
-                    <td><?php echo esc_html($cc->code ?: '—'); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php endif; ?>
-        <div style="margin-top:10px;">
-            <h3><?php esc_html_e('Ajouter un centre de coût', 'portail-entreprises'); ?></h3>
-            <input type="text" id="new_cc_name" placeholder="<?php esc_attr_e('Nom', 'portail-entreprises'); ?>" class="regular-text" />
-            <input type="text" id="new_cc_code" placeholder="<?php esc_attr_e('Code', 'portail-entreprises'); ?>" class="small-text" />
-            <button type="button" class="button" id="pe-add-cost-center"
-                    data-company="<?php echo esc_attr($company_id); ?>"
-                    data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
-                <?php esc_html_e('Ajouter', 'portail-entreprises'); ?>
-            </button>
-        </div>
-    </div>
-
     <!-- Règles d'approbation -->
     <div class="pe-form-card" style="margin-top:20px;">
         <h2><?php esc_html_e('Règles d\'approbation', 'portail-entreprises'); ?></h2>
@@ -341,6 +277,8 @@ $all_roles = PE_Permissions::get_roles();
                     <th><?php esc_html_e('E-mail', 'portail-entreprises'); ?></th>
                     <th><?php esc_html_e('Rôle', 'portail-entreprises'); ?></th>
                     <th><?php esc_html_e('Budget mensuel', 'portail-entreprises'); ?></th>
+                    <th><?php esc_html_e('Budget annuel', 'portail-entreprises'); ?></th>
+                    <th><?php esc_html_e('Budget/commande', 'portail-entreprises'); ?></th>
                     <th><?php esc_html_e('Actions', 'portail-entreprises'); ?></th>
                 </tr>
             </thead>
@@ -362,6 +300,20 @@ $all_roles = PE_Permissions::get_roles();
                         <?php endif; ?>
                     </td>
                     <td>
+                        <?php if ($user->budget_annual !== null) : ?>
+                            <?php echo esc_html(number_format((float) $user->budget_annual, 2, ',', ' ')); ?> €
+                        <?php else : ?>
+                            <em><?php esc_html_e('Illimité', 'portail-entreprises'); ?></em>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($user->budget_per_order !== null) : ?>
+                            <?php echo esc_html(number_format((float) $user->budget_per_order, 2, ',', ' ')); ?> €
+                        <?php else : ?>
+                            <em><?php esc_html_e('Illimité', 'portail-entreprises'); ?></em>
+                        <?php endif; ?>
+                    </td>
+                    <td>
                         <a href="<?php echo esc_url(admin_url('user-edit.php?user_id=' . (int) $user->user_id)); ?>"
                            class="button button-small">
                             <?php esc_html_e('Modifier', 'portail-entreprises'); ?>
@@ -373,6 +325,354 @@ $all_roles = PE_Permissions::get_roles();
                             <?php esc_html_e('Retirer', 'portail-entreprises'); ?>
                         </button>
                     </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+
+        <!-- Rechercher / Inviter un utilisateur -->
+        <div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;">
+            <h3 style="margin-top:0;"><?php esc_html_e('Ajouter un utilisateur', 'portail-entreprises'); ?></h3>
+            <div style="margin-bottom:12px;">
+                <button type="button" class="button pe-user-tab-btn pe-tab-active" data-tab="existing">
+                    <?php esc_html_e('Utilisateur existant', 'portail-entreprises'); ?>
+                </button>
+                <button type="button" class="button pe-user-tab-btn" data-tab="invite" style="margin-left:4px;">
+                    <?php esc_html_e('Inviter par e-mail', 'portail-entreprises'); ?>
+                </button>
+            </div>
+
+            <!-- Tab : utilisateur existant -->
+            <div id="pe-panel-existing" style="padding:15px; background:#f9f9f9; border:1px solid #ddd;">
+                <table class="form-table" style="margin:0;">
+                    <tr>
+                        <th style="width:200px;"><?php esc_html_e('Rechercher', 'portail-entreprises'); ?></th>
+                        <td style="position:relative;">
+                            <input type="text" id="pe-user-search-input" class="regular-text"
+                                   placeholder="<?php esc_attr_e('Nom ou adresse e-mail…', 'portail-entreprises'); ?>"
+                                   autocomplete="off" />
+                            <div id="pe-user-search-results"
+                                 style="display:none; position:absolute; top:100%; left:0; background:#fff; border:1px solid #ddd; min-width:340px; max-height:220px; overflow-y:auto; z-index:200; box-shadow:0 2px 6px rgba(0,0,0,.15);"></div>
+                            <input type="hidden" id="pe-selected-user-id" />
+                            <span id="pe-selected-user-label" style="display:inline-block; margin-top:4px; color:#2271b1; font-weight:600;"></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Rôle', 'portail-entreprises'); ?></th>
+                        <td>
+                            <select id="pe-existing-role">
+                                <?php foreach ($all_roles as $rk => $rl) : ?>
+                                <option value="<?php echo esc_attr($rk); ?>"><?php echo esc_html($rl); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget mensuel (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-existing-bm" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget annuel (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-existing-ba" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget par commande (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-existing-bpo" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                </table>
+                <p style="margin-top:10px;">
+                    <button type="button" class="button button-primary" id="pe-add-existing-btn"
+                            data-company="<?php echo esc_attr($company_id); ?>"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
+                        <?php esc_html_e('Ajouter à la société', 'portail-entreprises'); ?>
+                    </button>
+                    <span id="pe-add-existing-msg" style="margin-left:10px;"></span>
+                </p>
+            </div>
+
+            <!-- Tab : inviter par e-mail -->
+            <div id="pe-panel-invite" style="display:none; padding:15px; background:#f9f9f9; border:1px solid #ddd;">
+                <table class="form-table" style="margin:0;">
+                    <tr>
+                        <th style="width:200px;"><label for="pe-inv-email"><?php esc_html_e('Adresse e-mail *', 'portail-entreprises'); ?></label></th>
+                        <td><input type="email" id="pe-inv-email" class="regular-text" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="pe-inv-firstname"><?php esc_html_e('Prénom', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="pe-inv-firstname" class="regular-text" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="pe-inv-lastname"><?php esc_html_e('Nom', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="pe-inv-lastname" class="regular-text" /></td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Rôle', 'portail-entreprises'); ?></th>
+                        <td>
+                            <select id="pe-inv-role">
+                                <?php foreach ($all_roles as $rk => $rl) : ?>
+                                <option value="<?php echo esc_attr($rk); ?>"><?php echo esc_html($rl); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget mensuel (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-inv-bm" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget annuel (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-inv-ba" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><?php esc_html_e('Budget par commande (€)', 'portail-entreprises'); ?></th>
+                        <td><input type="number" id="pe-inv-bpo" class="small-text" min="0" step="0.01"
+                                   placeholder="<?php esc_attr_e('Illimité', 'portail-entreprises'); ?>" /></td>
+                    </tr>
+                </table>
+                <p style="margin-top:10px;">
+                    <button type="button" class="button button-primary" id="pe-invite-btn"
+                            data-company="<?php echo esc_attr($company_id); ?>"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
+                        <?php esc_html_e('Inviter et envoyer l\'e-mail', 'portail-entreprises'); ?>
+                    </button>
+                    <span id="pe-invite-msg" style="margin-left:10px;"></span>
+                </p>
+            </div>
+        </div>
+
+        <script>
+        jQuery(function($) {
+            // Tab switching
+            $('.pe-user-tab-btn').on('click', function() {
+                var tab = $(this).data('tab');
+                $('.pe-user-tab-btn').removeClass('pe-tab-active button-primary');
+                $(this).addClass('pe-tab-active button-primary');
+                $('#pe-panel-existing, #pe-panel-invite').hide();
+                $('#pe-panel-' + tab).show();
+            }).first().trigger('click');
+
+            // User search
+            var searchTimer;
+            var companyId = <?php echo (int) $company_id; ?>;
+            var ajaxNonce = '<?php echo esc_js(wp_create_nonce('pe_b2b_ajax')); ?>';
+
+            $('#pe-user-search-input').on('keyup', function() {
+                clearTimeout(searchTimer);
+                var q = $(this).val().trim();
+                if (q.length < 2) { $('#pe-user-search-results').hide().empty(); return; }
+                searchTimer = setTimeout(function() {
+                    $.post(ajaxurl, { action: 'pe_admin_search_users', nonce: ajaxNonce, search: q, company_id: companyId }, function(res) {
+                        var $list = $('#pe-user-search-results').empty();
+                        if (res.success && res.data.users.length) {
+                            $.each(res.data.users, function(i, u) {
+                                $('<div>').text(u.name + ' — ' + u.email)
+                                    .css({ padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' })
+                                    .on('mouseenter', function() { $(this).css('background', '#f0f6ff'); })
+                                    .on('mouseleave', function() { $(this).css('background', ''); })
+                                    .on('click', function() {
+                                        $('#pe-selected-user-id').val(u.id);
+                                        $('#pe-selected-user-label').text(u.name + ' (' + u.email + ')');
+                                        $('#pe-user-search-input').val('');
+                                        $list.hide().empty();
+                                    }).appendTo($list);
+                            });
+                            $list.show();
+                        } else {
+                            $list.append($('<div>').text('<?php echo esc_js(__('Aucun résultat.', 'portail-entreprises')); ?>').css({ padding: '7px 12px', color: '#888' })).show();
+                        }
+                    });
+                }, 300);
+            });
+
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#pe-user-search-input, #pe-user-search-results').length) {
+                    $('#pe-user-search-results').hide();
+                }
+            });
+
+            // Add existing user
+            $('#pe-add-existing-btn').on('click', function() {
+                var userId = $('#pe-selected-user-id').val();
+                if (!userId) {
+                    $('#pe-add-existing-msg').css('color', '#b32d2e').text('<?php echo esc_js(__('Sélectionnez d\'abord un utilisateur.', 'portail-entreprises')); ?>');
+                    return;
+                }
+                var $btn = $(this).prop('disabled', true).text('<?php echo esc_js(__('Ajout en cours…', 'portail-entreprises')); ?>');
+                $.post(ajaxurl, {
+                    action: 'pe_admin_add_user_to_company',
+                    nonce: ajaxNonce,
+                    user_id: userId,
+                    company_id: companyId,
+                    role: $('#pe-existing-role').val(),
+                    budget_monthly: $('#pe-existing-bm').val(),
+                    budget_annual: $('#pe-existing-ba').val(),
+                    budget_per_order: $('#pe-existing-bpo').val()
+                }, function(res) {
+                    if (res.success) {
+                        $('#pe-add-existing-msg').css('color', '#28a745').text(res.data.message);
+                        setTimeout(function() { location.reload(); }, 1000);
+                    } else {
+                        $('#pe-add-existing-msg').css('color', '#b32d2e').text(res.data.message);
+                        $btn.prop('disabled', false).text('<?php echo esc_js(__('Ajouter à la société', 'portail-entreprises')); ?>');
+                    }
+                });
+            });
+
+            // Invite by email
+            $('#pe-invite-btn').on('click', function() {
+                var email = $('#pe-inv-email').val().trim();
+                if (!email) {
+                    $('#pe-invite-msg').css('color', '#b32d2e').text('<?php echo esc_js(__('L\'adresse e-mail est requise.', 'portail-entreprises')); ?>');
+                    return;
+                }
+                var $btn = $(this).prop('disabled', true).text('<?php echo esc_js(__('Envoi en cours…', 'portail-entreprises')); ?>');
+                $.post(ajaxurl, {
+                    action: 'pe_admin_invite_user_to_company',
+                    nonce: ajaxNonce,
+                    company_id: companyId,
+                    email: email,
+                    first_name: $('#pe-inv-firstname').val(),
+                    last_name: $('#pe-inv-lastname').val(),
+                    role: $('#pe-inv-role').val(),
+                    budget_monthly: $('#pe-inv-bm').val(),
+                    budget_annual: $('#pe-inv-ba').val(),
+                    budget_per_order: $('#pe-inv-bpo').val()
+                }, function(res) {
+                    if (res.success) {
+                        $('#pe-invite-msg').css('color', '#28a745').text(res.data.message);
+                        setTimeout(function() { location.reload(); }, 1500);
+                    } else {
+                        $('#pe-invite-msg').css('color', '#b32d2e').text(res.data.message);
+                        $btn.prop('disabled', false).text('<?php echo esc_js(__("Inviter et envoyer l'e-mail", 'portail-entreprises')); ?>');
+                    }
+                });
+            });
+        });
+        </script>
+    </div>
+
+    <!-- Commandes associées -->
+    <div class="pe-form-card" style="margin-top:20px;">
+        <h2><?php esc_html_e('Commandes associées', 'portail-entreprises'); ?></h2>
+        <?php
+        $company_orders = (class_exists('PE_Core') && function_exists('wc_get_order'))
+            ? PE_Core::get_company_orders($company_id, 20)
+            : [];
+        ?>
+        <?php if (empty($company_orders)) : ?>
+            <p><?php esc_html_e('Aucune commande trouvée pour cette société.', 'portail-entreprises'); ?></p>
+        <?php else : ?>
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>
+                    <th style="width:100px;"><?php esc_html_e('Commande', 'portail-entreprises'); ?></th>
+                    <th><?php esc_html_e('Client', 'portail-entreprises'); ?></th>
+                    <th style="width:120px;"><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
+                    <th style="width:130px;"><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
+                    <th style="width:100px;"><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
+                    <th style="width:80px;"><?php esc_html_e('Actions', 'portail-entreprises'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($company_orders as $order) : ?>
+                <tr>
+                    <td><strong>#<?php echo esc_html($order->get_order_number()); ?></strong></td>
+                    <td><?php echo esc_html($order->get_formatted_billing_full_name()); ?></td>
+                    <td><?php echo esc_html(date_i18n(get_option('date_format'), $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0)); ?></td>
+                    <td><?php echo esc_html(wc_get_order_status_name($order->get_status())); ?></td>
+                    <td><?php echo wp_kses_post(wc_price($order->get_total())); ?></td>
+                    <td>
+                        <a href="<?php echo esc_url($order->get_edit_order_url()); ?>" class="button button-small">
+                            <?php esc_html_e('Voir', 'portail-entreprises'); ?>
+                        </a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php if (20 === count($company_orders)) : ?>
+        <p style="margin-top:8px;">
+            <a href="<?php echo esc_url(admin_url('edit.php?post_type=shop_order')); ?>">
+                <?php esc_html_e('Voir toutes les commandes →', 'portail-entreprises'); ?>
+            </a>
+        </p>
+        <?php endif; ?>
+        <?php endif; ?>
+    </div>
+
+    <!-- Journal d'activité -->
+    <div class="pe-form-card" style="margin-top:20px;">
+        <h2><?php esc_html_e('Journal d\'activité', 'portail-entreprises'); ?></h2>
+        <?php
+        $audit_logs = PE_Audit_Log::get_instance()->get_logs([
+            'company_id' => $company_id,
+            'per_page'   => 50,
+        ]);
+        $audit_action_labels = [
+            'create_company'           => __('Société créée', 'portail-entreprises'),
+            'update_company'           => __('Société modifiée', 'portail-entreprises'),
+            'delete_company'           => __('Société supprimée', 'portail-entreprises'),
+            'add_user_to_company'      => __('Utilisateur ajouté', 'portail-entreprises'),
+            'remove_user_from_company' => __('Utilisateur retiré', 'portail-entreprises'),
+            'create_agency'            => __('Agence créée', 'portail-entreprises'),
+            'create_sub_account'       => __('Invitation envoyée', 'portail-entreprises'),
+            'suspend_user'             => __('Utilisateur suspendu', 'portail-entreprises'),
+            'reactivate_user'          => __('Utilisateur réactivé', 'portail-entreprises'),
+            'enable_b2b'               => __('B2B activé', 'portail-entreprises'),
+            'disable_b2b'              => __('B2B désactivé', 'portail-entreprises'),
+            'save_approval_rule'       => __('Règle d\'approbation modifiée', 'portail-entreprises'),
+        ];
+        ?>
+        <?php if (empty($audit_logs)) : ?>
+            <p><?php esc_html_e('Aucune activité enregistrée pour cette société.', 'portail-entreprises'); ?></p>
+        <?php else : ?>
+        <table class="wp-list-table widefat fixed striped" style="font-size:13px;">
+            <thead>
+                <tr>
+                    <th style="width:150px;"><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
+                    <th style="width:180px;"><?php esc_html_e('Utilisateur', 'portail-entreprises'); ?></th>
+                    <th><?php esc_html_e('Action', 'portail-entreprises'); ?></th>
+                    <th style="width:120px;"><?php esc_html_e('Adresse IP', 'portail-entreprises'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($audit_logs as $log_entry) : ?>
+                <?php
+                $log_user   = $log_entry->user_id ? get_userdata((int) $log_entry->user_id) : null;
+                $log_data   = $log_entry->data ? (array) json_decode($log_entry->data, true) : [];
+                $action_lbl = $audit_action_labels[$log_entry->action] ?? esc_html($log_entry->action);
+                $details    = [];
+                if (!empty($log_data['email'])) {
+                    $details[] = $log_data['email'];
+                }
+                if (!empty($log_data['role']) && isset($all_roles[$log_data['role']])) {
+                    $details[] = $all_roles[$log_data['role']];
+                }
+                ?>
+                <tr>
+                    <td><?php echo esc_html(date_i18n(get_option('date_format') . ' H:i', strtotime($log_entry->created_at))); ?></td>
+                    <td>
+                        <?php if ($log_user) : ?>
+                            <a href="<?php echo esc_url(admin_url('user-edit.php?user_id=' . (int) $log_entry->user_id)); ?>">
+                                <?php echo esc_html($log_user->display_name); ?>
+                            </a>
+                        <?php else : ?>
+                            <em><?php esc_html_e('Système', 'portail-entreprises'); ?></em>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php echo esc_html($action_lbl); ?>
+                        <?php if (!empty($details)) : ?>
+                            <small style="color:#888;"> — <?php echo esc_html(implode(', ', $details)); ?></small>
+                        <?php endif; ?>
+                    </td>
+                    <td><?php echo esc_html($log_entry->ip_address ?: '—'); ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
