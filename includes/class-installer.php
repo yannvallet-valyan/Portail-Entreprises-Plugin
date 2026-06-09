@@ -55,6 +55,7 @@ class PE_Installer {
             budget_monthly DECIMAL(12,2) DEFAULT NULL,
             budget_annual DECIMAL(12,2) DEFAULT NULL,
             budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1,
+            tdw_profile_slug VARCHAR(100) DEFAULT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -208,8 +209,6 @@ class PE_Installer {
             $sql_audit_log,
         ];
 
-        // Exécution directe (plus fiable que dbDelta pour ON UPDATE CURRENT_TIMESTAMP,
-        // ENGINE=InnoDB et les colonnes ENUM). On capture les erreurs SQL réelles.
         $errors = [];
         foreach ($tables as $sql) {
             // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -220,9 +219,7 @@ class PE_Installer {
         }
 
         if (!empty($errors)) {
-            // Journaliser pour diagnostic sans interrompre l'activation.
             error_log('[Portail Entreprises] Erreurs création tables : ' . implode(' | ', $errors));
-            // Ne pas marquer la version comme installée si des tables ont échoué.
             if (!self::tables_exist()) {
                 return;
             }
@@ -234,6 +231,12 @@ class PE_Installer {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_monthly DECIMAL(12,2) DEFAULT NULL");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_annual DECIMAL(12,2) DEFAULT NULL");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1");
+        }
+
+        // Migrate: add tdw_profile_slug column if missing (v1.3.0)
+        $col_profile = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'tdw_profile_slug'");
+        if (!$col_profile) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN tdw_profile_slug VARCHAR(100) DEFAULT NULL");
         }
 
         self::update_db_version();

@@ -50,6 +50,12 @@ class PE_Company_Manager {
             $formats[]                       = '%d';
         }
 
+        // tdw_profile_slug : profil de remise TDW optionnel.
+        if (array_key_exists('tdw_profile_slug', $data)) {
+            $insert_data['tdw_profile_slug'] = !empty($data['tdw_profile_slug']) ? sanitize_key((string) $data['tdw_profile_slug']) : null;
+            $formats[] = '%s';
+        }
+
         $result = $wpdb->insert(
             $wpdb->prefix . 'b2b_companies',
             $insert_data,
@@ -162,6 +168,10 @@ class PE_Company_Manager {
             $update_data['modules_enabled'] = wp_json_encode($data['modules_enabled']);
             $update_format[]                = '%s';
         }
+        if (array_key_exists('tdw_profile_slug', $data)) {
+            $update_data['tdw_profile_slug'] = !empty($data['tdw_profile_slug']) ? sanitize_key((string) $data['tdw_profile_slug']) : null;
+            $update_format[]                 = '%s';
+        }
 
         if (empty($update_data)) {
             return false;
@@ -199,7 +209,6 @@ class PE_Company_Manager {
 
     /**
      * Synchronise l'adresse de facturation de la société dans le profil WooCommerce d'un membre.
-     * Appelée à l'ajout d'un membre et lors de la mise à jour de l'adresse par l'admin société.
      */
     public function sync_billing_address_to_user(int $user_id, int $company_id): void {
         $company = $this->get_company($company_id);
@@ -564,7 +573,6 @@ class PE_Company_Manager {
 
         $prefix = $wpdb->prefix . 'b2b_';
 
-        // Détacher les utilisateurs (retirer le flag B2B des utilisateurs rattachés).
         $user_ids = $wpdb->get_col(
             $wpdb->prepare("SELECT user_id FROM {$prefix}user_company WHERE company_id = %d", $company_id)
         );
@@ -572,7 +580,6 @@ class PE_Company_Manager {
             PE_Permissions::flush_user_cache((int) $uid);
         }
 
-        // Supprimer toutes les données liées à l'entreprise.
         $wpdb->delete($prefix . 'user_company',       ['company_id' => $company_id], ['%d']);
         $wpdb->delete($prefix . 'agencies',           ['company_id' => $company_id], ['%d']);
         $wpdb->delete($prefix . 'cost_centers',       ['company_id' => $company_id], ['%d']);
