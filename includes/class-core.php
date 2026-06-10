@@ -79,11 +79,43 @@ class PE_Core {
         PE_Approval_Manager::get_instance()->init();
         PE_Magic_Link_Manager::get_instance()->init();
 
+        // Backfill unique des rôles de profil sur les membres existants.
+        add_action('admin_init', [$this, 'maybe_backfill_profile_roles']);
+
         // Admin
         if (is_admin()) {
             require_once PE_PATH . 'includes/admin/class-admin.php';
             PE_Admin::get_instance();
         }
+    }
+
+    /**
+     * Synchronise une seule fois le rôle WordPress des membres existants avec
+     * le profil de remise de leur société. S'exécute en admin (tous les plugins
+     * et rôles sont alors chargés) et ne se relance pas une fois terminé.
+     */
+    public function maybe_backfill_profile_roles(): void {
+        if (get_option('pe_profile_roles_synced')) {
+            return;
+        }
+
+        // Sans le plugin de profils, rien à synchroniser : on marque comme fait.
+        if (!class_exists('TDW_B2B_Taxonomies')) {
+            update_option('pe_profile_roles_synced', 1, false);
+            return;
+        }
+
+        global $wpdb;
+        $company_ids = $wpdb->get_col(
+            "SELECT id FROM {$wpdb->prefix}b2b_companies WHERE tdw_profile_slug IS NOT NULL AND tdw_profile_slug <> ''"
+        );
+
+        $manager = PE_Company_Manager::get_instance();
+        foreach ($company_ids as $company_id) {
+            $manager->sync_profile_role_to_members((int) $company_id);
+        }
+
+        update_option('pe_profile_roles_synced', 1, false);
     }
 
     public function register_custom_order_status(): void {

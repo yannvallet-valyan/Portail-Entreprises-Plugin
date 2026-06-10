@@ -233,6 +233,12 @@ class PE_Company_Manager {
             if (isset($update_data['billing_address'])) {
                 $this->sync_billing_address_to_members($id);
             }
+
+            // Le profil de remise pilote le rôle WordPress des membres : on
+            // resynchronise les rôles à chaque enregistrement du profil.
+            if (array_key_exists('tdw_profile_slug', $update_data)) {
+                $this->sync_profile_role_to_members($id);
+            }
         }
 
         return false !== $result;
@@ -270,6 +276,142 @@ class PE_Company_Manager {
         $users = $this->get_company_users($company_id);
         foreach ($users as $user) {
             $this->sync_billing_address_to_user((int) $user->user_id, $company_id);
+        }
+    }
+
+    /**
+     * Résout le slug du rôle WordPress correspondant à un profil de remise.
+     *
+     * Par défaut on associe le profil au rôle WordPress portant le même
+     * identifiant (slug). À défaut, on recherche le rôle dont le nom
+     * correspond à celui du profil (ex. profil « Membre OR » → rôle
+     * « Membre OR »). Le filtre `pe_profile_role_slug` permet de surcharger
+     * cette correspondance.
+     *
+     * @param string $profile_slug Slug du profil de remise.
+     * @return string|null Slug du rôle WordPress, ou null si aucun ne correspond.
+     */
+    public function get_profile_role_slug(string $profile_slug): ?string {
+        $profile_slug = sanitize_key($profile_slug);
+        $wp_roles     = wp_roles();
+        $role_slug    = null;
+
+        if ('' !== $profile_slug) {
+            // 1. Correspondance directe par identifiant.
+            if ($wp_roles->is_role($profile_slug)) {
+                $role_slug = $profile_slug;
+            } else {
+                // 2. Correspondance par nom de profil ↔ nom de rôle.
+                $profile_name = '';
+                if (class_exists('TDW_B2B_Taxonomies')) {
+                    foreach (TDW_B2B_Taxonomies::get_profiles() as $profile) {
+                        if (sanitize_key((string) ($profile['slug'] ?? '')) === $profile_slug) {
+                            $profile_name = (string) ($profile['name'] ?? '');
+                            break;
+                        }
+                    }
+                }
+
+                if ('' !== $profile_name) {
+                    foreach ($wp_roles->roles as $slug => $role) {
+                        if (0 === strcasecmp((string) ($role['name'] ?? ''), $profile_name)) {
+                            $role_slug = $slug;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Filtre le rôle WordPress associé à un profil de remise.
+         *
+         * @param string|null $role_slug    Slug du rôle résolu (null si aucun).
+         * @param string      $profile_slug Slug du profil de remise.
+         */
+        $role_slug = apply_filters('pe_profile_role_slug', $role_slug, $profile_slug);
+
+        return (!empty($role_slug) && $wp_roles->is_role($role_slug)) ? $role_slug : null;
+    }
+
+    /**
+     * Retourne l'ensemble des slugs de rôles WordPress gérés par les profils de remise.
+     *
+     * Utilisé pour retirer les anciens rôles de profil d'un utilisateur sans
+     * toucher à ses autres rôles (ex. « customer »).
+     *
+     * @return string[]
+     */
+    public function get_all_profile_role_slugs(): array {
+        $roles = [];
+
+        if (class_exists('TDW_B2B_Taxonomies')) {
+            foreach (TDW_B2B_Taxonomies::get_profiles() as $profile) {
+                $role_slug = $this->get_profile_role_slug((string) ($profile['slug'] ?? ''));
+                if ($role_slug) {
+                    $roles[$role_slug] = true;
+                }
+            }
+        }
+
+        return array_keys($roles);
+    }
+
+    /**
+     * Applique à un utilisateur le rôle WordPress correspondant à un profil de remise.
+     *
+     * Les autres rôles de profil sont retirés afin qu'un utilisateur ne porte
+     * que le rôle de son profil courant. Les rôles hors profil (« customer »…)
+     * sont préservés.
+     *
+     * @param int         $user_id      ID de l'utilisateur.
+     * @param string|null $profile_slug Slug du profil cible, ou null/'' pour aucun.
+     */
+    public function sync_profile_role_to_user(int $user_id, ?string $profile_slug): void {
+        $user = get_user_by('id', $user_id);
+        if (!$user) {
+            return;
+        }
+
+        $target_role   = !empty($profile_slug) ? $this->get_profile_role_slug($profile_slug) : null;
+        $profile_roles = $this->get_all_profile_role_slugs();
+        $current_roles = (array) $user->roles;
+
+        // Retire les rôles de profil obsolètes (tous sauf le rôle cible).
+        foreach ($profile_roles as $role_slug) {
+            if ($role_slug !== $target_role && in_array($role_slug, $current_roles, true)) {
+                $user->remove_role($role_slug);
+            }
+        }
+
+        // Ajoute le rôle cible s'il n'est pas déjà présent.
+        if ($target_role && !in_array($target_role, $current_roles, true)) {
+            $user->add_role($target_role);
+        }
+    }
+
+    /**
+     * Synchronise le rôle de profil d'un utilisateur d'après sa société principale.
+     *
+     * @param int $user_id ID de l'utilisateur.
+     */
+    public function sync_user_profile_role(int $user_id): void {
+        PE_Permissions::flush_user_cache($user_id);
+
+        $company = PE_Permissions::get_user_company($user_id);
+        $profile = $company ? (string) ($company->tdw_profile_slug ?? '') : '';
+
+        $this->sync_profile_role_to_user($user_id, $profile);
+    }
+
+    /**
+     * Synchronise le rôle de profil de tous les membres d'une société.
+     *
+     * @param int $company_id ID de la société.
+     */
+    public function sync_profile_role_to_members(int $company_id): void {
+        foreach ($this->get_company_users($company_id) as $user) {
+            $this->sync_user_profile_role((int) $user->user_id);
         }
     }
 
@@ -340,6 +482,7 @@ class PE_Company_Manager {
         if (false !== $result) {
             PE_Permissions::flush_user_cache($user_id);
             $this->sync_billing_address_to_user($user_id, $company_id);
+            $this->sync_user_profile_role($user_id);
 
             PE_Audit_Log::get_instance()->log(
                 get_current_user_id(),
@@ -368,6 +511,9 @@ class PE_Company_Manager {
 
         if (false !== $result) {
             PE_Permissions::flush_user_cache($user_id);
+            // Réévalue le rôle de profil d'après la société principale restante
+            // (retire le rôle si l'utilisateur n'a plus de société à profil).
+            $this->sync_user_profile_role($user_id);
 
             PE_Audit_Log::get_instance()->log(
                 get_current_user_id(),
@@ -625,6 +771,12 @@ class PE_Company_Manager {
         }
 
         wp_cache_delete('pe_company_' . $company_id, 'portail-entreprises');
+
+        // Réévalue le rôle de profil des anciens membres (suppression du rôle
+        // si l'utilisateur n'appartient plus à une société à profil).
+        foreach ($user_ids as $uid) {
+            $this->sync_user_profile_role((int) $uid);
+        }
 
         PE_Audit_Log::get_instance()->log(
             get_current_user_id(),
