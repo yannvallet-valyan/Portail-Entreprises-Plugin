@@ -43,6 +43,7 @@ delete_option('pe_db_version');
 delete_option('pe_settings');
 delete_option('pe_rewrite_version');
 delete_option('pe_flush_rewrite_rules');
+delete_option('pe_profile_roles_synced');
 
 // Supprime les user meta
 $wpdb->query("DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ('b2b_enabled', 'b2b_role', 'b2b_company_id')");
