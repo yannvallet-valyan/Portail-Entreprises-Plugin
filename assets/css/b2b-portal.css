@@ -812,6 +812,44 @@
     background: var(--pe-blue-hover) !important;
 }
 
+/* Champs optionnels repliables (centre de coût + référence) */
+.pe-approval-fields {
+    margin: 10px 0;
+    text-align: left;
+}
+
+.pe-approval-fields__toggle {
+    cursor: pointer;
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--pe-blue);
+    user-select: none;
+}
+
+.pe-approval-fields__toggle::-webkit-details-marker {
+    display: none;
+}
+
+.pe-approval-fields__toggle::before {
+    content: "+";
+    display: inline-block;
+    width: 1em;
+    text-align: center;
+    font-weight: 700;
+}
+
+.pe-approval-fields[open] .pe-approval-fields__toggle::before {
+    content: "−";
+}
+
+.pe-approval-fields__toggle:hover {
+    text-decoration: underline;
+}
+
 /* Bouton-lien édition inline */
 .pe-btn-link {
     background: none;
