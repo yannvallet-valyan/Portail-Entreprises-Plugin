@@ -138,17 +138,19 @@ class PE_Budget_Manager {
         remove_action('woocommerce_widget_shopping_cart_buttons', 'woocommerce_widget_shopping_cart_button_view_cart', 10);
         remove_action('woocommerce_widget_shopping_cart_buttons', 'woocommerce_widget_shopping_cart_proceed_to_checkout', 20);
 
-        echo '<p class="woocommerce-mini-cart__buttons pe-checkout-blocked-mini">'
-            . '<a href="' . esc_url(wc_get_cart_url()) . '" class="button wc-forward">'
-            . esc_html__('Voir le panier', 'portail-entreprises')
-            . '</a>'
-            . '</p>'
-            . '<p class="pe-checkout-blocked-notice" style="font-size:0.85em;color:#b32d2e;margin:8px 0 0;padding:0 16px;">'
+        // Le formulaire d'approbation (centre de coût + référence) n'est volontairement
+        // PAS rendu dans le panier flottant : WoodMart y intercepte la soumission du
+        // <button> et b2b-portal.js n'est pas chargé hors des pages compte/panier/checkout.
+        // On dirige l'utilisateur vers la page panier — un simple lien <a href> navigue
+        // normalement — où le formulaire complet s'affiche et fonctionne de façon fiable.
+        echo '<p class="pe-checkout-blocked-notice" style="font-size:0.85em;color:#b32d2e;margin:8px 0 12px;padding:0 16px;">'
             . wp_kses_post($reason)
+            . '</p>'
+            . '<p class="woocommerce-mini-cart__buttons buttons pe-checkout-blocked-mini">'
+            . '<a href="' . esc_url(wc_get_cart_url()) . '" class="button alt wc-forward pe-minicart-approval-link">'
+            . esc_html__('Demander une approbation', 'portail-entreprises')
+            . '</a>'
             . '</p>';
-
-        // Bouton "Demander une approbation" dans le mini-panier.
-        echo $this->get_approval_button_for_render('minicart'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     /**

@@ -39,15 +39,9 @@ class PE_Approval_Manager {
      * Génère le HTML du bouton "Demander une approbation".
      */
     public function get_approval_button_html(string $context = 'cart'): string {
-        // Ne pas utiliser la classe `wc-forward` : dans le panier flottant WoodMart,
-        // elle est interceptée par un handler de navigation prévu pour des liens
-        // <a href>. Sur notre <button type="submit"> sans href, WoodMart appelle
-        // preventDefault() et le formulaire n'est jamais soumis. Un bouton « button
-        // alt » fonctionne dans les deux contextes (page panier et mini-panier).
+        // Bouton de soumission : ne jamais utiliser la classe `wc-forward` (réservée
+        // aux liens de navigation <a href> et interceptée par les thèmes comme WoodMart).
         $class = 'button alt pe-request-approval-btn';
-        if ('cart' !== $context) {
-            $class .= ' pe-minicart-approval-btn';
-        }
 
         // Champs centre de coût + référence personnelle.
         $extra_fields = $this->get_b2b_order_fields_html();
