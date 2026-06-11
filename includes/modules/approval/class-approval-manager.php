@@ -64,7 +64,13 @@ class PE_Approval_Manager {
             return '';
         }
 
-        $html = '<div class="pe-approval-fields" style="margin:10px 0;text-align:left;">';
+        // Bloc repliable « Plus d'options » regroupant les champs facultatifs.
+        $html = '<details class="pe-approval-fields" style="margin:10px 0;text-align:left;">';
+
+        $html .= '<summary style="cursor:pointer;font-size:0.9em;font-weight:600;list-style:revert;">'
+            . esc_html__('Plus d\'options', 'portail-entreprises') . '</summary>';
+
+        $html .= '<div style="margin-top:10px;">';
 
         // Centre de coût — champ texte libre.
         $html .= '<p style="margin:0 0 8px;"><label style="display:block;font-size:0.85em;margin-bottom:4px;">'
@@ -79,6 +85,8 @@ class PE_Approval_Manager {
             . 'placeholder="' . esc_attr__('Bon de commande, référence interne…', 'portail-entreprises') . '" /></p>';
 
         $html .= '</div>';
+
+        $html .= '</details>';
 
         return $html;
     }
