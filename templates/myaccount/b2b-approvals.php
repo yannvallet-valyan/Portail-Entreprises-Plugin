@@ -53,11 +53,74 @@ $status_labels = [
     'rejected' => ['label' => __('Rejetée', 'portail-entreprises'), 'badge' => 'pe-badge-suspended'],
 ];
 
-// Commandes de tous les membres (managers uniquement).
-$company_orders = [];
+// Commandes de l'entreprise (managers) + filtres de recherche (n°, dates, membre, statut).
+$company_orders  = [];
+$co_search       = '';
+$co_from         = '';
+$co_to           = '';
+$co_member       = 0;
+$co_status       = '';
+$co_members_list = [];
+$co_has_filters  = false;
+
 if ($can_approve) {
-    $company_orders = PE_Core::get_company_orders((int) $company->id, 100, $user_id);
+    $co_search = isset($_GET['co_search']) ? sanitize_text_field(wp_unslash($_GET['co_search'])) : '';
+    $co_from   = isset($_GET['co_from']) ? sanitize_text_field(wp_unslash($_GET['co_from'])) : '';
+    $co_to     = isset($_GET['co_to']) ? sanitize_text_field(wp_unslash($_GET['co_to'])) : '';
+    $co_member = isset($_GET['co_member']) ? absint($_GET['co_member']) : 0;
+    $co_status = isset($_GET['co_status']) ? sanitize_key($_GET['co_status']) : '';
+    $co_has_filters = ('' !== $co_search) || ('' !== $co_from) || ('' !== $co_to) || $co_member || ('' !== $co_status);
+
+    // Membres dont l'utilisateur peut voir les commandes (visibilité).
+    $co_visibility = PE_Order_Visibility::get_instance();
+    $co_member_ids = array_values(array_intersect(
+        $co_visibility->get_company_member_ids((int) $company->id),
+        $co_visibility->get_visible_user_ids($user_id)
+    ));
+
+    foreach ($co_member_ids as $mid) {
+        $mu = get_userdata($mid);
+        if ($mu) { $co_members_list[$mid] = $mu->display_name; }
+    }
+
+    if (!empty($co_member_ids)) {
+        $query_customer = ($co_member && in_array($co_member, $co_member_ids, true)) ? [$co_member] : $co_member_ids;
+
+        $args = [
+            'customer_id' => $query_customer,
+            'limit'       => -1,
+            'orderby'     => 'date',
+            'order'       => 'DESC',
+            'type'        => 'shop_order',
+        ];
+
+        $co_from_ts = $co_from ? strtotime($co_from . ' 00:00:00') : 0;
+        $co_to_ts   = $co_to ? strtotime($co_to . ' 23:59:59') : 0;
+        if ($co_from_ts && $co_to_ts) {
+            $args['date_created'] = $co_from_ts . '...' . $co_to_ts;
+        } elseif ($co_from_ts) {
+            $args['date_created'] = '>=' . $co_from_ts;
+        } elseif ($co_to_ts) {
+            $args['date_created'] = '<=' . $co_to_ts;
+        }
+
+        if ($co_status) {
+            $args['status'] = [$co_status];
+        }
+
+        $company_orders = wc_get_orders($args);
+
+        // Filtre numéro de commande (recherche partielle) en PHP.
+        if ('' !== $co_search) {
+            $co_needle = ltrim($co_search, '#');
+            $company_orders = array_filter(
+                $company_orders,
+                static fn($o) => stripos((string) $o->get_order_number(), $co_needle) !== false
+            );
+        }
+    }
 }
+$co_reset_url = remove_query_arg(['co_search', 'co_from', 'co_to', 'co_member', 'co_status']);
 
 $wc_status_labels = wc_get_order_statuses();
 ?>
@@ -247,9 +310,67 @@ $wc_status_labels = wc_get_order_statuses();
     </div>
 
     <!-- Section : Commandes de l'entreprise -->
-    <?php if (!empty($company_orders)) : ?>
-    <div style="margin-top:40px;">
+    <?php if ($can_approve) : ?>
+    <div id="pe-company-orders" style="margin-top:40px;scroll-margin-top:140px;">
         <h2 class="pe-section-title"><?php esc_html_e('Commandes de l\'entreprise', 'portail-entreprises'); ?></h2>
+
+        <form method="get" action="#pe-company-orders" class="pe-co-filters"
+              style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+            <?php if ('' !== $filter_status) : ?>
+            <input type="hidden" name="status" value="<?php echo esc_attr($filter_status); ?>" />
+            <?php endif; ?>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('N° de commande', 'portail-entreprises'); ?><br>
+                <input type="text" name="co_search" value="<?php echo esc_attr($co_search); ?>" class="pe-input"
+                       placeholder="<?php esc_attr_e('ex. 98815', 'portail-entreprises'); ?>" style="width:auto;min-width:130px;" />
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Membre', 'portail-entreprises'); ?><br>
+                <select name="co_member" class="pe-select" style="width:auto;min-width:150px;">
+                    <option value="0"><?php esc_html_e('Tous les membres', 'portail-entreprises'); ?></option>
+                    <?php foreach ($co_members_list as $mid => $mname) : ?>
+                    <option value="<?php echo esc_attr($mid); ?>" <?php selected($co_member, $mid); ?>>
+                        <?php echo esc_html($mname); ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Statut', 'portail-entreprises'); ?><br>
+                <select name="co_status" class="pe-select" style="width:auto;min-width:150px;">
+                    <option value=""><?php esc_html_e('Tous les statuts', 'portail-entreprises'); ?></option>
+                    <?php foreach ($wc_status_labels as $slug => $label) : ?>
+                    <option value="<?php echo esc_attr($slug); ?>" <?php selected($co_status, $slug); ?>>
+                        <?php echo esc_html($label); ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Du', 'portail-entreprises'); ?><br>
+                <input type="date" name="co_from" value="<?php echo esc_attr($co_from); ?>" class="pe-input" style="width:auto;" />
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Au', 'portail-entreprises'); ?><br>
+                <input type="date" name="co_to" value="<?php echo esc_attr($co_to); ?>" class="pe-input" style="width:auto;" />
+            </label>
+            <button type="submit" class="pe-btn pe-btn-sm pe-btn-primary"><?php esc_html_e('Rechercher', 'portail-entreprises'); ?></button>
+            <?php if ($co_has_filters) : ?>
+            <a href="<?php echo esc_url($co_reset_url . '#pe-company-orders'); ?>" style="font-size:.85em;color:#6b7280;align-self:center;">
+                <?php esc_html_e('Réinitialiser', 'portail-entreprises'); ?>
+            </a>
+            <?php endif; ?>
+        </form>
+
+        <?php if (empty($company_orders)) : ?>
+        <div class="pe-card"><div class="pe-card-body">
+            <p class="pe-text-muted" style="margin:0;">
+                <?php echo $co_has_filters
+                    ? esc_html__('Aucune commande ne correspond à votre recherche.', 'portail-entreprises')
+                    : esc_html__('Aucune commande pour le moment.', 'portail-entreprises'); ?>
+            </p>
+        </div></div>
+        <?php else : ?>
         <div class="pe-card">
             <div class="pe-table-responsive">
                 <table class="pe-table">
@@ -328,7 +449,8 @@ $wc_status_labels = wc_get_order_statuses();
                 </table>
             </div>
         </div>
+        <?php endif; // résultats commandes entreprise ?>
     </div>
-    <?php endif; ?>
-    <?php endif; ?>
+    <?php endif; // section commandes entreprise (managers) ?>
+    <?php endif; // liste des demandes ?>
 </div>
