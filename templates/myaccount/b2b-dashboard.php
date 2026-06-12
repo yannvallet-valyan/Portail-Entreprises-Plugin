@@ -224,7 +224,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
     </div>
 
     <!-- Commandes récentes -->
-    <div class="pe-section">
+    <div class="pe-section" id="pe-commandes" style="scroll-margin-top:140px;">
         <h3 class="pe-section-subtitle"><?php esc_html_e('Commandes', 'portail-entreprises'); ?></h3>
 
         <?php if ($can_see_members) : ?>

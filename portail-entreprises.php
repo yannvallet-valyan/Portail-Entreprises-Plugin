@@ -3,7 +3,7 @@
  * Plugin Name: Portail Entreprises B2B
  * Plugin URI:  https://b-mesure.fr
  * Description: Portail B2B complet pour WooCommerce : gestion des entreprises, utilisateurs, budgets, workflow d'approbation et audit.
- * Version:     1.4.1
+ * Version:     1.4.3
  * Author:      B MESURE
  * Author URI:  https://b-mesure.fr
  * Text Domain: portail-entreprises
@@ -17,7 +17,7 @@
 defined('ABSPATH') || exit;
 
 // Constants
-define('PE_VERSION', '1.4.1');
+define('PE_VERSION', '1.4.3');
 define('PE_PATH', plugin_dir_path(__FILE__));
 define('PE_URL', plugin_dir_url(__FILE__));
 define('PE_DB_VERSION', '1.4.0');
