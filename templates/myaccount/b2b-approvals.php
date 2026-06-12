@@ -141,25 +141,28 @@ $wc_status_labels = wc_get_order_statuses();
                         <?php endif; ?>
                         <td><strong><?php echo wp_kses_post(wc_price($req->amount)); ?></strong></td>
                         <td class="pe-cc-cell" data-order-id="<?php echo esc_attr($req->order_id); ?>">
-                            <?php if ($can_approve) : ?>
                             <span class="pe-cc-display">
                                 <?php echo $cost_center_label ? esc_html($cost_center_label) : '<em>—</em>'; ?>
                             </span>
-                            <?php if ($order) : ?>
+                            <?php if ($can_approve && $order) : ?>
                             <button type="button" class="pe-btn-link pe-edit-meta-btn"
                                     data-order-id="<?php echo esc_attr($req->order_id); ?>"
-                                    data-cc-id="<?php echo esc_attr($current_cc_id); ?>"
+                                    data-cc-label="<?php echo esc_attr($cost_center_label); ?>"
                                     data-reference="<?php echo esc_attr($reference); ?>"
                                     title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
-                            <?php endif; ?>
-                            <?php else : ?>
-                                <?php echo $cost_center_label ? esc_html($cost_center_label) : '<em>—</em>'; ?>
                             <?php endif; ?>
                         </td>
                         <td class="pe-ref-cell" data-order-id="<?php echo esc_attr($req->order_id); ?>">
                             <span class="pe-ref-display">
                                 <?php echo $reference ? esc_html($reference) : '<em>—</em>'; ?>
                             </span>
+                            <?php if ($can_approve && $order) : ?>
+                            <button type="button" class="pe-btn-link pe-edit-meta-btn"
+                                    data-order-id="<?php echo esc_attr($req->order_id); ?>"
+                                    data-cc-label="<?php echo esc_attr($cost_center_label); ?>"
+                                    data-reference="<?php echo esc_attr($reference); ?>"
+                                    title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($req->created_at))); ?>
@@ -223,39 +226,7 @@ $wc_status_labels = wc_get_order_statuses();
 
     <!-- Modale d'édition centre de coût + référence (managers) -->
     <?php if ($can_approve) : ?>
-    <div id="pe-edit-meta-modal" class="pe-modal" style="display:none;" aria-modal="true" role="dialog">
-        <div class="pe-modal-overlay"></div>
-        <div class="pe-modal-content">
-            <h3><?php esc_html_e('Modifier les informations B2B', 'portail-entreprises'); ?></h3>
-            <?php if (!empty($company_cost_centers)) : ?>
-            <div class="pe-form-row" style="margin-bottom:12px;">
-                <label for="pe-edit-cc"><?php esc_html_e('Centre de coût', 'portail-entreprises'); ?></label>
-                <select id="pe-edit-cc" class="pe-select" style="width:100%;margin-top:4px;">
-                    <option value="0"><?php esc_html_e('— Aucun —', 'portail-entreprises'); ?></option>
-                    <?php foreach ($company_cost_centers as $cc) : ?>
-                    <option value="<?php echo esc_attr((int) $cc->id); ?>">
-                        <?php echo esc_html($cc->name . ($cc->code ? ' (' . $cc->code . ')' : '')); ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <?php endif; ?>
-            <div class="pe-form-row" style="margin-bottom:12px;">
-                <label for="pe-edit-ref"><?php esc_html_e('Référence', 'portail-entreprises'); ?></label>
-                <input type="text" id="pe-edit-ref" class="pe-input" style="width:100%;margin-top:4px;"
-                       placeholder="<?php esc_attr_e('Bon de commande, référence interne…', 'portail-entreprises'); ?>" />
-            </div>
-            <div class="pe-modal-actions">
-                <button type="button" class="pe-btn pe-btn-primary" id="pe-save-meta"
-                        data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
-                    <?php esc_html_e('Enregistrer', 'portail-entreprises'); ?>
-                </button>
-                <button type="button" class="pe-btn pe-btn-secondary pe-modal-close">
-                    <?php esc_html_e('Annuler', 'portail-entreprises'); ?>
-                </button>
-            </div>
-        </div>
-    </div>
+    <?php PE_Core::render_b2b_meta_modal(); ?>
 
     <!-- Modal de rejet -->
     <div id="pe-reject-modal" class="pe-modal" style="display:none;" aria-modal="true" role="dialog">
@@ -331,7 +302,7 @@ $wc_status_labels = wc_get_order_statuses();
                                 </span>
                                 <button type="button" class="pe-btn-link pe-edit-meta-btn"
                                         data-order-id="<?php echo esc_attr($co->get_id()); ?>"
-                                        data-cc-id="<?php echo esc_attr((int) $co->get_meta('_b2b_cost_center_id')); ?>"
+                                        data-cc-label="<?php echo esc_attr($co_cc); ?>"
                                         data-reference="<?php echo esc_attr($co_ref); ?>"
                                         title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
                             </td>
@@ -339,6 +310,11 @@ $wc_status_labels = wc_get_order_statuses();
                                 <span class="pe-ref-display">
                                     <?php echo $co_ref ? esc_html($co_ref) : '<em>—</em>'; ?>
                                 </span>
+                                <button type="button" class="pe-btn-link pe-edit-meta-btn"
+                                        data-order-id="<?php echo esc_attr($co->get_id()); ?>"
+                                        data-cc-label="<?php echo esc_attr($co_cc); ?>"
+                                        data-reference="<?php echo esc_attr($co_ref); ?>"
+                                        title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
                             </td>
                             <td>
                                 <a href="<?php echo esc_url($co->get_view_order_url()); ?>"

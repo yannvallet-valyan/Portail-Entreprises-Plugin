@@ -499,8 +499,9 @@ class PE_Core {
     }
 
     /**
-     * AJAX : met à jour le centre de coût et la référence sur une commande.
-     * Réservé aux company_admin et purchase_manager.
+     * AJAX : met à jour le centre de coût (texte libre) et la référence d'une commande.
+     * Autorisé au propriétaire de la commande, et aux managers pour les commandes
+     * visibles de leur entreprise.
      */
     public function ajax_update_order_b2b_meta(): void {
         check_ajax_referer('pe_b2b_ajax', 'nonce');
@@ -512,67 +513,98 @@ class PE_Core {
             wp_send_json_error(['message' => __('Paramètres invalides.', 'portail-entreprises')]);
         }
 
-        $role = PE_Permissions::get_user_b2b_role($user_id);
-        if (!in_array($role, ['company_admin', 'purchase_manager'], true)) {
-            wp_send_json_error(['message' => __('Permission refusée.', 'portail-entreprises')]);
-        }
-
         $order = wc_get_order($order_id);
         if (!$order) {
             wp_send_json_error(['message' => __('Commande introuvable.', 'portail-entreprises')]);
         }
 
-        // Vérifier que la commande appartient à l'entreprise du manager.
-        $company    = PE_Permissions::get_user_company($user_id);
         $order_user = (int) $order->get_customer_id();
+        $role       = PE_Permissions::get_user_b2b_role($user_id);
+        $is_manager = in_array($role, ['company_admin', 'purchase_manager'], true);
+        $is_own     = ($order_user === $user_id);
+
+        if (!$is_own && !$is_manager) {
+            wp_send_json_error(['message' => __('Permission refusée.', 'portail-entreprises')]);
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
         if (!$company || !PE_Permissions::user_belongs_to_company($order_user, (int) $company->id)) {
             wp_send_json_error(['message' => __('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises')]);
         }
 
-        // Respecte les règles de visibilité des commandes.
-        if (!PE_Order_Visibility::get_instance()->can_view($user_id, $order_user)) {
+        // Les managers restent soumis aux règles de visibilité (le propriétaire édite toujours la sienne).
+        if (!$is_own && !PE_Order_Visibility::get_instance()->can_view($user_id, $order_user)) {
             wp_send_json_error(['message' => __('Vous n\'êtes pas autorisé à accéder à cette commande.', 'portail-entreprises')]);
         }
 
-        $reference      = isset($_POST['reference']) ? sanitize_text_field(wp_unslash($_POST['reference'])) : '';
-        $cost_center_id = isset($_POST['cost_center_id']) ? absint($_POST['cost_center_id']) : 0;
+        $reference        = isset($_POST['reference']) ? sanitize_text_field(wp_unslash($_POST['reference'])) : '';
+        $cost_center_text = isset($_POST['cost_center_text']) ? sanitize_text_field(wp_unslash($_POST['cost_center_text'])) : '';
 
-        $order->update_meta_data('_b2b_personal_reference', $reference);
-
-        if ($cost_center_id > 0) {
-            global $wpdb;
-            $cc = $wpdb->get_row(
-                $wpdb->prepare(
-                    "SELECT name, code FROM {$wpdb->prefix}b2b_cost_centers WHERE id = %d AND company_id = %d LIMIT 1",
-                    $cost_center_id,
-                    (int) $company->id
-                )
-            );
-            if ($cc) {
-                $label = $cc->name . ($cc->code ? ' (' . $cc->code . ')' : '');
-                $order->update_meta_data('_b2b_cost_center_id', $cost_center_id);
-                $order->update_meta_data('_b2b_cost_center_label', $label);
-            }
+        // Référence.
+        if ('' !== $reference) {
+            $order->update_meta_data('_b2b_personal_reference', $reference);
         } else {
-            $order->delete_meta_data('_b2b_cost_center_id');
+            $order->delete_meta_data('_b2b_personal_reference');
+        }
+
+        // Centre de coût (texte libre, cohérent avec la saisie à la création).
+        if ('' !== $cost_center_text) {
+            $order->update_meta_data('_b2b_cost_center_label', $cost_center_text);
+        } else {
             $order->delete_meta_data('_b2b_cost_center_label');
         }
+        $order->delete_meta_data('_b2b_cost_center_id');
 
         $order->save();
 
-        // Mettre à jour aussi la demande d'approbation si elle existe.
-        global $wpdb;
-        if ($cost_center_id > 0) {
-            $wpdb->update(
-                $wpdb->prefix . 'b2b_approval_requests',
-                ['cost_center_id' => $cost_center_id, 'updated_at' => current_time('mysql')],
-                ['order_id' => $order_id],
-                ['%d', '%s'],
-                ['%d']
-            );
-        }
+        PE_Audit_Log::get_instance()->log(
+            $user_id,
+            (int) $company->id,
+            'update_order_b2b_meta',
+            'order',
+            $order_id,
+            ['cost_center' => $cost_center_text, 'reference' => $reference]
+        );
 
-        wp_send_json_success(['message' => __('Informations mises à jour.', 'portail-entreprises')]);
+        wp_send_json_success([
+            'message'     => __('Informations mises à jour.', 'portail-entreprises'),
+            'cost_center' => $cost_center_text,
+            'reference'   => $reference,
+        ]);
+    }
+
+    /**
+     * Affiche la modale d'édition du centre de coût (texte libre) et de la référence.
+     * Partagée entre la page Approbations et le Tableau de bord B2B.
+     */
+    public static function render_b2b_meta_modal(): void {
+        ?>
+        <div id="pe-edit-meta-modal" class="pe-modal" style="display:none;" aria-modal="true" role="dialog">
+            <div class="pe-modal-overlay"></div>
+            <div class="pe-modal-content">
+                <h3><?php esc_html_e('Modifier les informations B2B', 'portail-entreprises'); ?></h3>
+                <div class="pe-form-row" style="margin-bottom:12px;">
+                    <label for="pe-edit-cc"><?php esc_html_e('Centre de coût', 'portail-entreprises'); ?></label>
+                    <input type="text" id="pe-edit-cc" class="pe-input" style="width:100%;margin-top:4px;"
+                           placeholder="<?php esc_attr_e('Service, projet, code interne…', 'portail-entreprises'); ?>" />
+                </div>
+                <div class="pe-form-row" style="margin-bottom:12px;">
+                    <label for="pe-edit-ref"><?php esc_html_e('Référence', 'portail-entreprises'); ?></label>
+                    <input type="text" id="pe-edit-ref" class="pe-input" style="width:100%;margin-top:4px;"
+                           placeholder="<?php esc_attr_e('Bon de commande, référence interne…', 'portail-entreprises'); ?>" />
+                </div>
+                <div class="pe-modal-actions">
+                    <button type="button" class="pe-btn pe-btn-primary" id="pe-save-meta"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>">
+                        <?php esc_html_e('Enregistrer', 'portail-entreprises'); ?>
+                    </button>
+                    <button type="button" class="pe-btn pe-btn-secondary pe-modal-close">
+                        <?php esc_html_e('Annuler', 'portail-entreprises'); ?>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     /**

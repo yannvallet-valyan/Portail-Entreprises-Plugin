@@ -359,6 +359,8 @@ $active_total = ('membres' === $active_tab) ? $member_count : $my_count;
                         <th><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Centre de coût', 'portail-entreprises'); ?></th>
+                        <th><?php esc_html_e('Référence', 'portail-entreprises'); ?></th>
                         <th><?php esc_html_e('Actions', 'portail-entreprises'); ?></th>
                     </tr>
                 </thead>
@@ -390,6 +392,32 @@ $active_total = ('membres' === $active_tab) ? $member_count : $my_count;
                             </span>
                         </td>
                         <td><?php echo wp_kses_post($order->get_formatted_order_total()); ?></td>
+                        <?php
+                        $o_id_meta  = $order->get_id();
+                        $o_cc_label = $order->get_meta('_b2b_cost_center_label');
+                        $o_ref      = $order->get_meta('_b2b_personal_reference');
+                        $o_can_edit = ((int) $order->get_customer_id() === $user_id) || $is_manager;
+                        ?>
+                        <td class="pe-cc-cell" data-order-id="<?php echo esc_attr($o_id_meta); ?>">
+                            <span class="pe-cc-display"><?php echo $o_cc_label ? esc_html($o_cc_label) : '<em>—</em>'; ?></span>
+                            <?php if ($o_can_edit) : ?>
+                            <button type="button" class="pe-btn-link pe-edit-meta-btn"
+                                    data-order-id="<?php echo esc_attr($o_id_meta); ?>"
+                                    data-cc-label="<?php echo esc_attr($o_cc_label); ?>"
+                                    data-reference="<?php echo esc_attr($o_ref); ?>"
+                                    title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
+                            <?php endif; ?>
+                        </td>
+                        <td class="pe-ref-cell" data-order-id="<?php echo esc_attr($o_id_meta); ?>">
+                            <span class="pe-ref-display"><?php echo $o_ref ? esc_html($o_ref) : '<em>—</em>'; ?></span>
+                            <?php if ($o_can_edit) : ?>
+                            <button type="button" class="pe-btn-link pe-edit-meta-btn"
+                                    data-order-id="<?php echo esc_attr($o_id_meta); ?>"
+                                    data-cc-label="<?php echo esc_attr($o_cc_label); ?>"
+                                    data-reference="<?php echo esc_attr($o_ref); ?>"
+                                    title="<?php esc_attr_e('Modifier', 'portail-entreprises'); ?>">✏️</button>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>" class="pe-btn pe-btn-sm">
                                 <?php esc_html_e('Voir', 'portail-entreprises'); ?>
@@ -403,4 +431,6 @@ $active_total = ('membres' === $active_tab) ? $member_count : $my_count;
         <?php endif; // résultats filtrés ?>
         <?php endif; // commandes de l'onglet ?>
     </div>
+
+    <?php PE_Core::render_b2b_meta_modal(); ?>
 </div>

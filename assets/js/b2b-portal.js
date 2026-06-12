@@ -458,7 +458,7 @@
             $(document).on('click', '.pe-edit-meta-btn', function () {
                 var $btn      = $(this);
                 var orderId   = $btn.data('order-id');
-                var ccId      = $btn.data('cc-id') || 0;
+                var ccLabel   = $btn.data('cc-label') || '';
                 var reference = $btn.data('reference') || '';
                 var $modal    = $('#pe-edit-meta-modal');
 
@@ -467,18 +467,18 @@
                 }
 
                 $modal.data('order-id', orderId);
-                $('#pe-edit-cc').val(ccId);
+                $('#pe-edit-cc').val(ccLabel);
                 $('#pe-edit-ref').val(reference);
                 $modal.show();
-                $('#pe-edit-ref').focus();
+                $('#pe-edit-cc').focus();
             });
 
             $(document).on('click', '#pe-save-meta', function () {
                 var $btn    = $(this);
                 var $modal  = $('#pe-edit-meta-modal');
                 var orderId = $modal.data('order-id');
-                var ccId    = $('#pe-edit-cc').val() || 0;
-                var ref     = $('#pe-edit-ref').val().trim();
+                var ccText  = ($('#pe-edit-cc').val() || '').trim();
+                var ref     = ($('#pe-edit-ref').val() || '').trim();
                 var nonce   = $btn.data('nonce');
 
                 self.setButtonLoading($btn);
@@ -487,26 +487,28 @@
                     url:    peB2B.ajaxUrl,
                     method: 'POST',
                     data: {
-                        action:         'pe_update_order_b2b_meta',
-                        nonce:          nonce,
-                        order_id:       orderId,
-                        cost_center_id: ccId,
-                        reference:      ref
+                        action:           'pe_update_order_b2b_meta',
+                        nonce:            nonce,
+                        order_id:         orderId,
+                        cost_center_text: ccText,
+                        reference:        ref
                     },
                     success: function (response) {
                         self.resetButton($btn);
                         $modal.hide();
                         if (response.success) {
-                            // Mettre à jour l'affichage dans le tableau sans rechargement.
+                            var cc = response.data.cost_center || '';
+                            var rf = response.data.reference || '';
+                            var ccHtml = cc ? $('<div>').text(cc).html() : '<em>—</em>';
+                            var rfHtml = rf ? $('<div>').text(rf).html() : '<em>—</em>';
+
+                            // Met à jour toutes les cellules de cette commande (sans rechargement).
                             var $ccCell  = $('.pe-cc-cell[data-order-id="' + orderId + '"]');
                             var $refCell = $('.pe-ref-cell[data-order-id="' + orderId + '"]');
-                            var $editBtn = $ccCell.find('.pe-edit-meta-btn');
-
-                            $ccCell.find('.pe-cc-display').html(
-                                $('#pe-edit-cc option:selected').text().trim() || '<em>—</em>'
-                            );
-                            $refCell.find('.pe-ref-display').html(ref || '<em>—</em>');
-                            $editBtn.data('cc-id', ccId).data('reference', ref);
+                            $ccCell.find('.pe-cc-display').html(ccHtml);
+                            $refCell.find('.pe-ref-display').html(rfHtml);
+                            $('.pe-edit-meta-btn[data-order-id="' + orderId + '"]')
+                                .data('cc-label', cc).data('reference', rf);
 
                             self.showFeedback('success', response.data.message);
                         } else {
@@ -556,7 +558,7 @@
 
             if (!$feedback.length) {
                 $feedback = $('<div id="pe-approvals-feedback" class="pe-ajax-message"></div>');
-                $('.pe-approvals-page, .pe-users-page, .pe-company-page').first().prepend($feedback);
+                $('.pe-approvals-page, .pe-users-page, .pe-company-page, .pe-dashboard').first().prepend($feedback);
             }
 
             $feedback
