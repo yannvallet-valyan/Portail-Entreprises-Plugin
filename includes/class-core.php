@@ -43,6 +43,9 @@ class PE_Core {
         // Ajout des éléments de menu My Account pour les utilisateurs B2B
         add_filter('woocommerce_account_menu_items', [$this, 'add_b2b_menu_items']);
 
+        // Redirige la liste « Commandes » native vers le tableau de bord B2B (utilisateurs B2B).
+        add_action('template_redirect', [$this, 'redirect_orders_to_b2b_dashboard']);
+
         // Rendu des templates des endpoints
         add_action('woocommerce_account_b2b-dashboard_endpoint', [$this, 'render_dashboard']);
         add_action('woocommerce_account_b2b-company_endpoint', [$this, 'render_company']);
@@ -219,6 +222,27 @@ class PE_Core {
         if (file_exists($file)) {
             include $file;
         }
+    }
+
+    /**
+     * Redirige l'endpoint « Commandes » (mon-compte/orders) vers le tableau de bord B2B
+     * pour les utilisateurs B2B, lorsque le plugin est actif.
+     */
+    public function redirect_orders_to_b2b_dashboard(): void {
+        if (is_admin() || !function_exists('is_account_page') || !is_account_page()) {
+            return;
+        }
+        if (!is_wc_endpoint_url('orders')) {
+            return;
+        }
+
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return;
+        }
+
+        wp_safe_redirect(wc_get_account_endpoint_url('b2b-dashboard'));
+        exit;
     }
 
     public function render_dashboard(): void {
