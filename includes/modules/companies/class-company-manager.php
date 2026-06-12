@@ -772,6 +772,9 @@ class PE_Company_Manager {
 
         wp_cache_delete('pe_company_' . $company_id, 'portail-entreprises');
 
+        // Supprime la configuration de visibilité des commandes de l'entreprise.
+        delete_option('pe_order_visibility_' . $company_id);
+
         // Réévalue le rôle de profil des anciens membres (suppression du rôle
         // si l'utilisateur n'appartient plus à une société à profil).
         foreach ($user_ids as $uid) {

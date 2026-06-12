@@ -59,6 +59,17 @@ class PE_Order_Visibility {
     }
 
     /**
+     * Clé d'option WordPress stockant la config de visibilité d'une entreprise.
+     *
+     * Stockée en option (et non en colonne SQL) pour ne dépendre d'aucune
+     * migration de schéma : la fonctionnalité est ainsi opérationnelle dès
+     * la mise à jour du plugin.
+     */
+    private function option_key(int $company_id): string {
+        return 'pe_order_visibility_' . $company_id;
+    }
+
+    /**
      * Retourne la configuration de visibilité d'une entreprise (avec valeurs par défaut).
      *
      * @return array{default:string,roles:array,users:array,excluded:int[],blocks:array}
@@ -68,15 +79,9 @@ class PE_Order_Visibility {
             return $this->config_cache[$company_id];
         }
 
-        global $wpdb;
-        $raw = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT order_visibility FROM {$wpdb->prefix}b2b_companies WHERE id = %d LIMIT 1",
-                $company_id
-            )
-        );
+        $stored = get_option($this->option_key($company_id), []);
 
-        $config = $this->normalize_config(json_decode((string) $raw, true));
+        $config = $this->normalize_config($stored);
         $this->config_cache[$company_id] = $config;
 
         return $config;
@@ -140,17 +145,11 @@ class PE_Order_Visibility {
      * Enregistre la configuration de visibilité d'une entreprise.
      */
     public function save_config(int $company_id, array $config): bool {
-        global $wpdb;
-
         $config = $this->normalize_config($config);
 
-        $result = $wpdb->update(
-            $wpdb->prefix . 'b2b_companies',
-            ['order_visibility' => wp_json_encode($config)],
-            ['id' => $company_id],
-            ['%s'],
-            ['%d']
-        );
+        // update_option renvoie false si la valeur est inchangée : on autorise
+        // ce cas pour ne pas remonter une fausse erreur.
+        update_option($this->option_key($company_id), $config, false);
 
         // Invalide les caches.
         unset($this->config_cache[$company_id]);
@@ -160,18 +159,16 @@ class PE_Order_Visibility {
             PE_Permissions::flush_user_cache($uid);
         }
 
-        if (false !== $result) {
-            PE_Audit_Log::get_instance()->log(
-                get_current_user_id(),
-                $company_id,
-                'update_order_visibility',
-                'company',
-                $company_id,
-                $config
-            );
-        }
+        PE_Audit_Log::get_instance()->log(
+            get_current_user_id(),
+            $company_id,
+            'update_order_visibility',
+            'company',
+            $company_id,
+            $config
+        );
 
-        return false !== $result;
+        return true;
     }
 
     /* =========================================================
