@@ -135,7 +135,10 @@ class PE_Magic_Link_Manager {
     }
 
     /**
-     * Retourne le bloc HTML (boutons) à insérer dans l'e-mail d'approbation.
+     * Retourne le bloc HTML (bouton) à insérer dans l'e-mail d'approbation.
+     *
+     * Un seul bouton « Voir la demande d'approbation » : la validation/le refus
+     * s'effectuent sur la page dédiée (façon panier) pour éviter la redondance.
      */
     public function get_email_buttons_html(int $request_id, int $approver_id): string {
         $links = $this->get_decision_links($request_id, $approver_id);
@@ -147,24 +150,18 @@ class PE_Magic_Link_Manager {
 
         return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">'
             . '<tr>'
-            . '<td style="padding-right:12px;">'
-            . '<a href="' . esc_url($links['approve']) . '" '
-            . 'style="display:inline-block;background:#28a745;color:#ffffff;text-decoration:none;'
-            . 'padding:14px 28px;border-radius:6px;font-weight:600;font-family:sans-serif;font-size:15px;">'
-            . esc_html__('✓ Valider la demande', 'portail-entreprises') . '</a>'
-            . '</td>'
             . '<td>'
-            . '<a href="' . esc_url($links['reject']) . '" '
-            . 'style="display:inline-block;background:#dc3545;color:#ffffff;text-decoration:none;'
+            . '<a href="' . esc_url($links['view']) . '" '
+            . 'style="display:inline-block;background:#2d6ebd;color:#ffffff;text-decoration:none;'
             . 'padding:14px 28px;border-radius:6px;font-weight:600;font-family:sans-serif;font-size:15px;">'
-            . esc_html__('✗ Refuser la demande', 'portail-entreprises') . '</a>'
+            . esc_html__('Voir la demande d\'approbation', 'portail-entreprises') . '</a>'
             . '</td>'
             . '</tr>'
             . '</table>'
             . '<p style="font-size:12px;color:#888;font-family:sans-serif;">'
             . sprintf(
                 /* translators: %s: validity duration */
-                esc_html__('Ces liens sont valables %s et utilisables une seule fois.', 'portail-entreprises'),
+                esc_html__('Ce lien est valable %s et utilisable une seule fois.', 'portail-entreprises'),
                 esc_html($validity_label)
             )
             . '</p>';
@@ -453,6 +450,21 @@ class PE_Magic_Link_Manager {
         $reference     = $order ? $order->get_meta('_b2b_personal_reference') : '';
         $cost_center   = $order ? $order->get_meta('_b2b_cost_center_label') : '';
 
+        // Calcul des remises : différence entre le sous-total (avant remise) et le
+        // total des lignes (après remises produit/admin et coupons).
+        $cart_subtotal = 0.0;
+        $discount      = 0.0;
+        $coupon_codes  = [];
+        if ($order) {
+            $cart_subtotal = (float) $order->get_subtotal();
+            $items_total   = 0.0;
+            foreach ($order->get_items() as $line_item) {
+                $items_total += (float) $line_item->get_total();
+            }
+            $discount     = $cart_subtotal - $items_total;
+            $coupon_codes = $order->get_coupon_codes();
+        }
+
         ob_start();
         ?>
         <div class="pe-approval woocommerce">
@@ -524,8 +536,19 @@ class PE_Magic_Link_Manager {
                             <?php if ($order) : ?>
                             <tr class="cart-subtotal">
                                 <th><?php esc_html_e('Sous-total', 'portail-entreprises'); ?></th>
-                                <td><?php echo wp_kses_post(wc_price($order->get_subtotal())); ?></td>
+                                <td><?php echo wp_kses_post(wc_price($cart_subtotal)); ?></td>
                             </tr>
+                            <?php if ($discount > 0.0001) : ?>
+                            <tr class="cart-discount">
+                                <th>
+                                    <?php esc_html_e('Remise', 'portail-entreprises'); ?>
+                                    <?php if (!empty($coupon_codes)) : ?>
+                                    <span class="pe-approval-coupons">(<?php echo esc_html(implode(', ', $coupon_codes)); ?>)</span>
+                                    <?php endif; ?>
+                                </th>
+                                <td>−<?php echo wp_kses_post(wc_price($discount)); ?></td>
+                            </tr>
+                            <?php endif; ?>
                             <?php foreach ($order->get_items('shipping') as $shipping_item) : ?>
                             <tr class="shipping">
                                 <th><?php echo esc_html($shipping_item->get_name()); ?></th>
@@ -636,11 +659,26 @@ class PE_Magic_Link_Manager {
     private function render_layout(string $title, string $content): void {
         status_header(200);
 
-        // Titre du document.
+        // Titre du document (onglet navigateur).
         $full_title = $title . ' — ' . get_bloginfo('name');
         add_filter('pre_get_document_title', static function () use ($full_title) {
             return $full_title;
         });
+        // Forcer le titre auprès des principaux plugins SEO.
+        add_filter('wpseo_title', static function () use ($full_title) {
+            return $full_title;
+        });
+        add_filter('rank_math/frontend/title', static function () use ($full_title) {
+            return $full_title;
+        });
+
+        // Masquer la barre de titre du thème (affiche « Blog » sur cette page virtuelle) :
+        // notre propre titre « Demande d'approbation » prend le relais dans le contenu.
+        add_filter('woodmart_page_title', '__return_false');
+        add_filter('woodmart_page_title_string', static function () use ($title) {
+            return $title;
+        });
+
         add_action('wp_head', static function () {
             echo '<meta name="robots" content="noindex,nofollow" />' . "\n";
         });
@@ -669,8 +707,11 @@ class PE_Magic_Link_Manager {
         .pe-approval-cart-table .product-thumbnail img { width:64px; height:auto; }
         .pe-approval-product-name { display:block; font-weight:600; }
         .pe-approval-sku { display:block; font-size:.85em; color:#888; margin-top:2px; }
-        .pe-approval-cart .cart-collaterals { margin-top:24px; }
-        .pe-approval-cart .cart_totals { max-width:480px; margin-left:auto; }
+        .pe-approval-cart .cart-collaterals { margin-top:32px; overflow:hidden; }
+        .pe-approval-cart .cart_totals { max-width:520px; margin:0 auto; float:none; width:100%; }
+        .pe-approval-cart .cart_totals h2 { text-align:center; }
+        .pe-approval-cart .cart_totals > table { width:100%; }
+        .pe-approval-coupons { font-weight:400; font-size:.85em; color:#888; }
         .pe-approval-meta { margin:16px 0; font-size:.95em; }
         .pe-approval-meta p { margin:0 0 6px; }
         .pe-approval-reject-reason { margin:16px 0; }
