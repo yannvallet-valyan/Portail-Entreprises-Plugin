@@ -370,15 +370,18 @@ $billing_parts = array_filter([
                                         <?php if ($m_admin) : ?>
                                             <em class="pe-text-muted">—</em>
                                         <?php else : ?>
-                                        <select name="pe_ov_block[<?php echo esc_attr($m_id); ?>][]" class="pe-select" multiple size="3" style="min-width:160px;">
+                                        <div class="pe-ov-block-list" style="display:flex;flex-direction:column;gap:4px;">
                                             <?php foreach ($ov_members as $owner) : ?>
                                             <?php $o_id = (int) $owner->user_id; ?>
                                             <?php if ($o_id === $m_id) { continue; } ?>
-                                            <option value="<?php echo esc_attr($o_id); ?>" <?php selected(in_array($o_id, $m_blocks, true)); ?>>
+                                            <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">
+                                                <input type="checkbox" name="pe_ov_block[<?php echo esc_attr($m_id); ?>][]"
+                                                       value="<?php echo esc_attr($o_id); ?>"
+                                                       <?php checked(in_array($o_id, $m_blocks, true)); ?> />
                                                 <?php echo esc_html($owner->display_name); ?>
-                                            </option>
+                                            </label>
                                             <?php endforeach; ?>
-                                        </select>
+                                        </div>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -387,7 +390,7 @@ $billing_parts = array_filter([
                         </table>
                     </div>
                     <p class="pe-text-muted" style="font-size:0.85em;">
-                        <?php esc_html_e('« Ne peut pas voir » : sélectionnez les membres dont ce membre ne doit pas voir les commandes (maintenez Ctrl/Cmd pour en choisir plusieurs).', 'portail-entreprises'); ?>
+                        <?php esc_html_e('« Ne peut pas voir » : cochez les membres dont ce membre ne doit pas voir les commandes.', 'portail-entreprises'); ?>
                     </p>
                 </div>
                 <?php endif; ?>
