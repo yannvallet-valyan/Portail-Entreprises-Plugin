@@ -98,7 +98,7 @@ if ($can_see_members) {
 
 // Onglet actif (paramètre GET, défaut : mes-commandes)
 $active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $can_see_members) ? 'membres' : 'mes-commandes';
-$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', 'orders_year']);
+$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', 'order_search', 'date_from', 'date_to']);
 ?>
 
 <div class="pe-dashboard">
@@ -281,43 +281,68 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
             <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></p>
         <?php else : ?>
         <?php
-        // Regroupement des commandes par année.
-        $orders_by_year = [];
-        foreach ($display_orders as $o) {
-            $d = $o->get_date_created();
-            $y = $d ? $d->date('Y') : __('Inconnu', 'portail-entreprises');
-            $orders_by_year[$y][] = $o;
-        }
-        $years = array_keys($orders_by_year);
-        rsort($years); // Années les plus récentes en premier.
+        // Filtres de recherche (numéro de commande / plage de dates).
+        $order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
+        $date_from    = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
+        $date_to      = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
 
-        $selected_year = isset($_GET['orders_year']) ? sanitize_text_field(wp_unslash($_GET['orders_year'])) : '';
-        if (!in_array($selected_year, $years, true)) {
-            $selected_year = $years[0] ?? '';
-        }
-        $year_orders = $orders_by_year[$selected_year] ?? [];
+        $from_ts    = $date_from ? strtotime($date_from . ' 00:00:00') : 0;
+        $to_ts      = $date_to ? strtotime($date_to . ' 23:59:59') : 0;
+        $search_num = ltrim($order_search, '#');
 
-        // Base d'URL conservant l'onglet courant et les filtres membres.
-        $year_args = ['orders_tab' => $active_tab];
+        $filtered_orders = array_filter($display_orders, function ($o) use ($search_num, $from_ts, $to_ts) {
+            if ('' !== $search_num && stripos((string) $o->get_order_number(), $search_num) === false) {
+                return false;
+            }
+            $d  = $o->get_date_created();
+            $ts = $d ? $d->getTimestamp() : 0;
+            if ($from_ts && $ts < $from_ts) { return false; }
+            if ($to_ts && $ts > $to_ts) { return false; }
+            return true;
+        });
+
+        $has_filters = ('' !== $order_search) || ('' !== $date_from) || ('' !== $date_to);
+
+        // Base d'URL conservant l'onglet courant et les filtres membres (pour « Réinitialiser »).
+        $base_args = ['orders_tab' => $active_tab];
         if ('membres' === $active_tab) {
-            if ($member_filter_user)   { $year_args['member_uid'] = $member_filter_user; }
-            if ($member_filter_status) { $year_args['member_status'] = $member_filter_status; }
+            if ($member_filter_user)   { $base_args['member_uid'] = $member_filter_user; }
+            if ($member_filter_status) { $base_args['member_status'] = $member_filter_status; }
         }
         ?>
 
-        <?php if (count($years) > 1) : ?>
-        <div class="pe-year-tabs" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;">
-            <?php foreach ($years as $y) : ?>
-            <?php $is_active_year = ($y === $selected_year); ?>
-            <a href="<?php echo esc_url(add_query_arg($year_args + ['orders_year' => $y], $tab_base_url) . '#pe-commandes'); ?>"
-               style="padding:5px 14px;border-radius:999px;text-decoration:none;font-size:0.85em;font-weight:600;border:1px solid <?php echo $is_active_year ? '#1e3a5f' : '#d1d5db'; ?>;background:<?php echo $is_active_year ? '#1e3a5f' : '#fff'; ?>;color:<?php echo $is_active_year ? '#fff' : '#374151'; ?>;">
-                <?php echo esc_html($y); ?>
-                <span style="opacity:.8;font-weight:400;">(<?php echo count($orders_by_year[$y]); ?>)</span>
+        <form method="get" action="#pe-commandes" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:8px 0 14px;">
+            <input type="hidden" name="orders_tab" value="<?php echo esc_attr($active_tab); ?>" />
+            <?php if ('membres' === $active_tab && $member_filter_user) : ?>
+            <input type="hidden" name="member_uid" value="<?php echo esc_attr($member_filter_user); ?>" />
+            <?php endif; ?>
+            <?php if ('membres' === $active_tab && $member_filter_status) : ?>
+            <input type="hidden" name="member_status" value="<?php echo esc_attr($member_filter_status); ?>" />
+            <?php endif; ?>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('N° de commande', 'portail-entreprises'); ?><br>
+                <input type="text" name="order_search" value="<?php echo esc_attr($order_search); ?>" class="pe-input"
+                       placeholder="<?php esc_attr_e('ex. 98815', 'portail-entreprises'); ?>" style="width:auto;min-width:140px;" />
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Du', 'portail-entreprises'); ?><br>
+                <input type="date" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="pe-input" style="width:auto;" />
+            </label>
+            <label style="font-size:.85em;color:#374151;">
+                <?php esc_html_e('Au', 'portail-entreprises'); ?><br>
+                <input type="date" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="pe-input" style="width:auto;" />
+            </label>
+            <button type="submit" class="pe-btn pe-btn-sm pe-btn-primary"><?php esc_html_e('Rechercher', 'portail-entreprises'); ?></button>
+            <?php if ($has_filters) : ?>
+            <a href="<?php echo esc_url(add_query_arg($base_args, $tab_base_url) . '#pe-commandes'); ?>" style="font-size:.85em;color:#6b7280;align-self:center;">
+                <?php esc_html_e('Réinitialiser', 'portail-entreprises'); ?>
             </a>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
+            <?php endif; ?>
+        </form>
 
+        <?php if (empty($filtered_orders)) : ?>
+            <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande ne correspond à votre recherche.', 'portail-entreprises'); ?></p>
+        <?php else : ?>
         <div class="pe-table-responsive">
             <table class="pe-table pe-orders-table">
                 <thead>
@@ -333,7 +358,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($year_orders as $order) : ?>
+                    <?php foreach ($filtered_orders as $order) : ?>
                     <tr>
                         <td>
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>">
@@ -370,6 +395,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
                 </tbody>
             </table>
         </div>
-        <?php endif; ?>
+        <?php endif; // résultats filtrés ?>
+        <?php endif; // commandes de l'onglet ?>
     </div>
 </div>
