@@ -225,5 +225,180 @@ $billing_parts = array_filter([
             </form>
         </div>
     </div>
+
+    <!-- Gestion de la visibilité des commandes -->
+    <?php
+    $visibility_mgr = PE_Order_Visibility::get_instance();
+
+    if (isset($_POST['pe_update_order_visibility']) && isset($_POST['_wpnonce_visibility'])) {
+        if (!wp_verify_nonce(sanitize_key($_POST['_wpnonce_visibility']), 'pe_update_order_visibility_' . (int) $company->id)) {
+            wc_add_notice(__('Erreur de sécurité.', 'portail-entreprises'), 'error');
+        } else {
+            $new_config = [
+                'default'  => (isset($_POST['pe_ov_default']) && 'own' === $_POST['pe_ov_default']) ? 'own' : 'all',
+                'roles'    => [],
+                'users'    => [],
+                'excluded' => [],
+                'blocks'   => [],
+            ];
+
+            if (!empty($_POST['pe_ov_role']) && is_array($_POST['pe_ov_role'])) {
+                foreach (wp_unslash($_POST['pe_ov_role']) as $r => $scope) {
+                    if (in_array($scope, ['all', 'own'], true)) {
+                        $new_config['roles'][sanitize_key((string) $r)] = $scope;
+                    }
+                }
+            }
+            if (!empty($_POST['pe_ov_user_scope']) && is_array($_POST['pe_ov_user_scope'])) {
+                foreach (wp_unslash($_POST['pe_ov_user_scope']) as $uid => $scope) {
+                    if (in_array($scope, ['all', 'own'], true)) {
+                        $new_config['users'][(int) $uid] = $scope;
+                    }
+                }
+            }
+            if (!empty($_POST['pe_ov_excluded']) && is_array($_POST['pe_ov_excluded'])) {
+                $new_config['excluded'] = array_map('intval', wp_unslash($_POST['pe_ov_excluded']));
+            }
+            if (!empty($_POST['pe_ov_block']) && is_array($_POST['pe_ov_block'])) {
+                foreach (wp_unslash($_POST['pe_ov_block']) as $viewer => $owners) {
+                    if (is_array($owners)) {
+                        $new_config['blocks'][(int) $viewer] = array_map('intval', $owners);
+                    }
+                }
+            }
+
+            $visibility_mgr->save_config((int) $company->id, $new_config);
+            wc_add_notice(__('Visibilité des commandes mise à jour.', 'portail-entreprises'), 'success');
+        }
+    }
+
+    $ov_config  = $visibility_mgr->get_config((int) $company->id);
+    $ov_members = $company_mgr->get_company_users((int) $company->id);
+    $ov_roles   = PE_Permissions::get_roles();
+    ?>
+    <div class="pe-card" style="margin-top:20px;">
+        <div class="pe-card-header">
+            <h3><?php esc_html_e('Gestion de la visibilité des commandes', 'portail-entreprises'); ?></h3>
+        </div>
+        <div class="pe-card-body">
+            <p class="pe-text-muted" style="margin-top:0;">
+                <?php esc_html_e('Définissez qui peut consulter les commandes de l\'entreprise. Priorité : restriction par utilisateur, puis par rôle, puis règle générale. Les administrateurs voient toujours toutes les commandes.', 'portail-entreprises'); ?>
+            </p>
+
+            <form method="post" action="" class="pe-form">
+                <?php wp_nonce_field('pe_update_order_visibility_' . (int) $company->id, '_wpnonce_visibility'); ?>
+
+                <!-- Règle générale -->
+                <div class="pe-form-row" style="margin-bottom:16px;">
+                    <strong><?php esc_html_e('Règle générale', 'portail-entreprises'); ?></strong>
+                    <label style="display:block;margin-top:6px;">
+                        <input type="radio" name="pe_ov_default" value="all" <?php checked('all', $ov_config['default']); ?> />
+                        <?php esc_html_e('Tous les membres voient toutes les commandes de l\'entreprise', 'portail-entreprises'); ?>
+                    </label>
+                    <label style="display:block;margin-top:4px;">
+                        <input type="radio" name="pe_ov_default" value="own" <?php checked('own', $ov_config['default']); ?> />
+                        <?php esc_html_e('Chaque membre voit uniquement ses propres commandes', 'portail-entreprises'); ?>
+                    </label>
+                </div>
+
+                <!-- Par rôle -->
+                <div style="margin-bottom:16px;">
+                    <strong><?php esc_html_e('Restriction par rôle', 'portail-entreprises'); ?></strong>
+                    <table class="pe-table" style="margin-top:8px;">
+                        <tbody>
+                            <?php foreach ($ov_roles as $role_key => $role_label) : ?>
+                            <?php if ('company_admin' === $role_key) { continue; } ?>
+                            <?php $role_scope = $ov_config['roles'][$role_key] ?? ''; ?>
+                            <tr>
+                                <td><?php echo esc_html($role_label); ?></td>
+                                <td style="text-align:right;">
+                                    <select name="pe_ov_role[<?php echo esc_attr($role_key); ?>]" class="pe-select">
+                                        <option value="" <?php selected('', $role_scope); ?>><?php esc_html_e('Hériter de la règle générale', 'portail-entreprises'); ?></option>
+                                        <option value="all" <?php selected('all', $role_scope); ?>><?php esc_html_e('Toutes les commandes', 'portail-entreprises'); ?></option>
+                                        <option value="own" <?php selected('own', $role_scope); ?>><?php esc_html_e('Ses propres commandes', 'portail-entreprises'); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Par utilisateur -->
+                <?php if (!empty($ov_members)) : ?>
+                <div style="margin-bottom:8px;">
+                    <strong><?php esc_html_e('Restriction par utilisateur', 'portail-entreprises'); ?></strong>
+                    <div class="pe-table-responsive">
+                        <table class="pe-table" style="margin-top:8px;">
+                            <thead>
+                                <tr>
+                                    <th><?php esc_html_e('Membre', 'portail-entreprises'); ?></th>
+                                    <th><?php esc_html_e('Visibilité', 'portail-entreprises'); ?></th>
+                                    <th><?php esc_html_e('Exclure de la visibilité globale', 'portail-entreprises'); ?></th>
+                                    <th><?php esc_html_e('Ne peut pas voir', 'portail-entreprises'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($ov_members as $member) : ?>
+                                <?php
+                                $m_id     = (int) $member->user_id;
+                                $m_scope  = $ov_config['users'][$m_id] ?? '';
+                                $m_blocks = $ov_config['blocks'][$m_id] ?? [];
+                                $m_admin  = 'company_admin' === $member->role;
+                                ?>
+                                <tr>
+                                    <td>
+                                        <?php echo esc_html($member->display_name); ?>
+                                        <br><small class="pe-text-muted"><?php echo esc_html($ov_roles[$member->role] ?? $member->role); ?></small>
+                                    </td>
+                                    <td>
+                                        <?php if ($m_admin) : ?>
+                                            <em class="pe-text-muted"><?php esc_html_e('Toutes (admin)', 'portail-entreprises'); ?></em>
+                                        <?php else : ?>
+                                        <select name="pe_ov_user_scope[<?php echo esc_attr($m_id); ?>]" class="pe-select">
+                                            <option value="" <?php selected('', $m_scope); ?>><?php esc_html_e('Hériter', 'portail-entreprises'); ?></option>
+                                            <option value="all" <?php selected('all', $m_scope); ?>><?php esc_html_e('Toutes', 'portail-entreprises'); ?></option>
+                                            <option value="own" <?php selected('own', $m_scope); ?>><?php esc_html_e('Les siennes', 'portail-entreprises'); ?></option>
+                                        </select>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <input type="checkbox" name="pe_ov_excluded[]" value="<?php echo esc_attr($m_id); ?>"
+                                               <?php checked(in_array($m_id, $ov_config['excluded'], true)); ?> />
+                                    </td>
+                                    <td>
+                                        <?php if ($m_admin) : ?>
+                                            <em class="pe-text-muted">—</em>
+                                        <?php else : ?>
+                                        <select name="pe_ov_block[<?php echo esc_attr($m_id); ?>][]" class="pe-select" multiple size="3" style="min-width:160px;">
+                                            <?php foreach ($ov_members as $owner) : ?>
+                                            <?php $o_id = (int) $owner->user_id; ?>
+                                            <?php if ($o_id === $m_id) { continue; } ?>
+                                            <option value="<?php echo esc_attr($o_id); ?>" <?php selected(in_array($o_id, $m_blocks, true)); ?>>
+                                                <?php echo esc_html($owner->display_name); ?>
+                                            </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="pe-text-muted" style="font-size:0.85em;">
+                        <?php esc_html_e('« Ne peut pas voir » : sélectionnez les membres dont ce membre ne doit pas voir les commandes (maintenez Ctrl/Cmd pour en choisir plusieurs).', 'portail-entreprises'); ?>
+                    </p>
+                </div>
+                <?php endif; ?>
+
+                <div class="pe-form-actions">
+                    <button type="submit" name="pe_update_order_visibility" value="1" class="pe-btn pe-btn-primary">
+                        <?php esc_html_e('Enregistrer la visibilité', 'portail-entreprises'); ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
     <?php endif; ?>
 </div>

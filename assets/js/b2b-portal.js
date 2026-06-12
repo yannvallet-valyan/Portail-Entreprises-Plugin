@@ -22,6 +22,36 @@
             this.bindModalClose();
             this.animateProgressBars();
             this.blockCheckoutIfNeeded();
+            this.renderApprovalBadge();
+        },
+
+        /**
+         * Affiche une pastille rouge avec le nombre d'approbations en attente
+         * sur l'entrée de menu « Approbations » (Mon compte).
+         */
+        renderApprovalBadge: function () {
+            var count = parseInt((peB2B && peB2B.pendingApprovals) || 0, 10);
+            if (!count || count < 1) {
+                return;
+            }
+
+            var $link = $('.woocommerce-MyAccount-navigation-link--b2b-approvals > a');
+            if (!$link.length) {
+                // Repli : on cible le lien dont l'URL pointe vers l'endpoint approbations.
+                $link = $('.woocommerce-MyAccount-navigation a[href*="b2b-approvals"]');
+            }
+            if (!$link.length) {
+                return;
+            }
+            // N'ajoute la pastille qu'une fois.
+            $link = $link.first();
+            if ($link.find('.pe-menu-badge').length) {
+                return;
+            }
+
+            $link.append(
+                ' <span class="pe-menu-badge">' + count + '</span>'
+            );
         },
 
         /**

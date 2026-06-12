@@ -56,7 +56,7 @@ $status_labels = [
 // Commandes de tous les membres (managers uniquement).
 $company_orders = [];
 if ($can_approve) {
-    $company_orders = PE_Core::get_company_orders((int) $company->id, 100);
+    $company_orders = PE_Core::get_company_orders((int) $company->id, 100, $user_id);
 }
 
 $wc_status_labels = wc_get_order_statuses();
