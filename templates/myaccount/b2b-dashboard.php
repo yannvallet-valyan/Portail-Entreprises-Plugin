@@ -40,7 +40,7 @@ $is_manager    = in_array($role, ['company_admin', 'purchase_manager'], true);
 // Mes commandes (onglet 1 — toujours)
 $my_orders = wc_get_orders([
     'customer_id' => $user_id,
-    'limit'       => 10,
+    'limit'       => -1,
     'orderby'     => 'date',
     'order'       => 'DESC',
     'status'      => $all_statuses,
@@ -77,7 +77,7 @@ if ($can_see_members) {
 
     $member_query = [
         'customer_id' => $query_ids,
-        'limit'       => 15,
+        'limit'       => -1,
         'orderby'     => 'date',
         'order'       => 'DESC',
         'status'      => $all_statuses,
@@ -98,7 +98,7 @@ if ($can_see_members) {
 
 // Onglet actif (paramètre GET, défaut : mes-commandes)
 $active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $can_see_members) ? 'membres' : 'mes-commandes';
-$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
+$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', 'orders_year']);
 ?>
 
 <div class="pe-dashboard">
@@ -280,6 +280,44 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
         <?php if (empty($display_orders)) : ?>
             <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></p>
         <?php else : ?>
+        <?php
+        // Regroupement des commandes par année.
+        $orders_by_year = [];
+        foreach ($display_orders as $o) {
+            $d = $o->get_date_created();
+            $y = $d ? $d->date('Y') : __('Inconnu', 'portail-entreprises');
+            $orders_by_year[$y][] = $o;
+        }
+        $years = array_keys($orders_by_year);
+        rsort($years); // Années les plus récentes en premier.
+
+        $selected_year = isset($_GET['orders_year']) ? sanitize_text_field(wp_unslash($_GET['orders_year'])) : '';
+        if (!in_array($selected_year, $years, true)) {
+            $selected_year = $years[0] ?? '';
+        }
+        $year_orders = $orders_by_year[$selected_year] ?? [];
+
+        // Base d'URL conservant l'onglet courant et les filtres membres.
+        $year_args = ['orders_tab' => $active_tab];
+        if ('membres' === $active_tab) {
+            if ($member_filter_user)   { $year_args['member_uid'] = $member_filter_user; }
+            if ($member_filter_status) { $year_args['member_status'] = $member_filter_status; }
+        }
+        ?>
+
+        <?php if (count($years) > 1) : ?>
+        <div class="pe-year-tabs" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;">
+            <?php foreach ($years as $y) : ?>
+            <?php $is_active_year = ($y === $selected_year); ?>
+            <a href="<?php echo esc_url(add_query_arg($year_args + ['orders_year' => $y], $tab_base_url) . '#pe-commandes'); ?>"
+               style="padding:5px 14px;border-radius:999px;text-decoration:none;font-size:0.85em;font-weight:600;border:1px solid <?php echo $is_active_year ? '#1e3a5f' : '#d1d5db'; ?>;background:<?php echo $is_active_year ? '#1e3a5f' : '#fff'; ?>;color:<?php echo $is_active_year ? '#fff' : '#374151'; ?>;">
+                <?php echo esc_html($y); ?>
+                <span style="opacity:.8;font-weight:400;">(<?php echo count($orders_by_year[$y]); ?>)</span>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
         <div class="pe-table-responsive">
             <table class="pe-table pe-orders-table">
                 <thead>
@@ -295,7 +333,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($display_orders as $order) : ?>
+                    <?php foreach ($year_orders as $order) : ?>
                     <tr>
                         <td>
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>">
