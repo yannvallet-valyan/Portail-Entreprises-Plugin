@@ -62,8 +62,10 @@ class PE_Core {
         // Sauvegarde du centre de coût sur la commande
         add_action('woocommerce_checkout_create_order', [$this, 'save_cost_center_to_order'], 10, 2);
 
-        // Affichage des infos B2B (centre de coût + référence) dans la commande.
-        add_filter('woocommerce_get_order_item_totals', [$this, 'add_b2b_order_totals_rows'], 10, 3);
+        // Affichage des infos B2B (centre de coût + référence) — discret, sous le total
+        // de la commande (page commande + e-mails WooCommerce).
+        add_action('woocommerce_order_details_after_order_table', [$this, 'render_b2b_order_meta_below']);
+        add_action('woocommerce_email_after_order_table', [$this, 'render_b2b_order_meta_below']);
         add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'display_b2b_order_meta_admin']);
 
         // AJAX : édition de centre de coût + référence par les managers.
@@ -442,38 +444,34 @@ class PE_Core {
     }
 
     /**
-     * Ajoute les lignes "Centre de coût" et "Votre référence" dans le récapitulatif
-     * de commande (Mon Compte, page commande, emails).
+     * Affiche le centre de coût et la référence de façon discrète, sous le tableau
+     * de commande (page « Détails de la commande » et e-mails WooCommerce).
+     *
+     * @param mixed $order Commande (objet WC_Order attendu).
      */
-    public function add_b2b_order_totals_rows(array $total_rows, \WC_Order $order, $tax_display = ''): array {
+    public function render_b2b_order_meta_below($order): void {
+        if (!$order instanceof \WC_Order) {
+            return;
+        }
+
         $cost_center = $order->get_meta('_b2b_cost_center_label');
         $reference   = $order->get_meta('_b2b_personal_reference');
 
         if (empty($cost_center) && empty($reference)) {
-            return $total_rows;
+            return;
         }
 
-        $new_rows = [];
-        foreach ($total_rows as $key => $row) {
-            // Insère nos lignes juste avant le total final.
-            if ('order_total' === $key) {
-                if (!empty($cost_center)) {
-                    $new_rows['b2b_cost_center'] = [
-                        'label' => __('Centre de coût :', 'portail-entreprises'),
-                        'value' => esc_html($cost_center),
-                    ];
-                }
-                if (!empty($reference)) {
-                    $new_rows['b2b_personal_reference'] = [
-                        'label' => __('Votre référence :', 'portail-entreprises'),
-                        'value' => esc_html($reference),
-                    ];
-                }
-            }
-            $new_rows[$key] = $row;
+        // Styles inline (compatibles e-mails) : discret, petit, gris.
+        echo '<div class="pe-order-b2b-meta" style="margin:6px 0 20px;font-size:12px;line-height:1.6;color:#999;">';
+        if (!empty($cost_center)) {
+            echo '<div><span style="color:#999;">' . esc_html__('Centre de coût :', 'portail-entreprises') . '</span> '
+                . esc_html($cost_center) . '</div>';
         }
-
-        return $new_rows;
+        if (!empty($reference)) {
+            echo '<div><span style="color:#999;">' . esc_html__('Votre référence :', 'portail-entreprises') . '</span> '
+                . esc_html($reference) . '</div>';
+        }
+        echo '</div>';
     }
 
     /**
