@@ -289,6 +289,23 @@
 .pe-badge-info      { background: var(--pe-blue-light); color: var(--pe-blue); }
 .pe-badge-neutral   { background: var(--pe-blue-light); color: var(--pe-navy); }
 
+/* Pastille de notification du menu (« Approbations [N] ») */
+.pe-menu-badge {
+    display: inline-block;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: var(--pe-red);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    vertical-align: middle;
+}
+
 /* Rôles */
 .pe-role-badge {
     display: inline-block;

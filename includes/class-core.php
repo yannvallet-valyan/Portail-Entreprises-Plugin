@@ -78,6 +78,7 @@ class PE_Core {
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
         PE_Magic_Link_Manager::get_instance()->init();
+        PE_Order_Visibility::get_instance()->init();
 
         // Backfill unique des rôles de profil sur les membres existants.
         add_action('admin_init', [$this, 'maybe_backfill_profile_roles']);
@@ -302,6 +303,12 @@ class PE_Core {
             }
         }
 
+        // Nombre d'approbations en attente (pastille du menu « Approbations »).
+        $pending_approvals = 0;
+        if (class_exists('PE_Approval_Manager')) {
+            $pending_approvals = PE_Approval_Manager::get_instance()->get_pending_count_for_user($user_id);
+        }
+
         wp_localize_script('pe-b2b-portal', 'peB2B', [
             'ajaxUrl'            => admin_url('admin-ajax.php'),
             'nonce'              => wp_create_nonce('pe_b2b_ajax'),
@@ -309,6 +316,7 @@ class PE_Core {
             'checkoutBlockMsg'   => $checkout_block_reason,
             'approvalButtonHtml' => $approval_button_html,
             'isCheckout'         => is_checkout(),
+            'pendingApprovals'   => $pending_approvals,
             'i18n'               => [
                 'confirmApprove'           => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),
                 'confirmReject'            => __('Confirmer le rejet de cette demande ?', 'portail-entreprises'),
@@ -496,6 +504,11 @@ class PE_Core {
             wp_send_json_error(['message' => __('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises')]);
         }
 
+        // Respecte les règles de visibilité des commandes.
+        if (!PE_Order_Visibility::get_instance()->can_view($user_id, $order_user)) {
+            wp_send_json_error(['message' => __('Vous n\'êtes pas autorisé à accéder à cette commande.', 'portail-entreprises')]);
+        }
+
         $reference      = isset($_POST['reference']) ? sanitize_text_field(wp_unslash($_POST['reference'])) : '';
         $cost_center_id = isset($_POST['cost_center_id']) ? absint($_POST['cost_center_id']) : 0;
 
@@ -565,6 +578,14 @@ class PE_Core {
         $company = PE_Permissions::get_user_company($user_id);
         if (!$company || !PE_Permissions::user_belongs_to_company((int) $order->get_customer_id(), (int) $company->id)) {
             wc_add_notice(__('Cette commande n\'appartient pas à votre entreprise.', 'portail-entreprises'), 'error');
+            wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
+            exit;
+        }
+
+        // Respecte les règles de visibilité des commandes (un gestionnaire restreint
+        // ne doit pas accéder à une commande qui lui est interdite).
+        if (!PE_Order_Visibility::get_instance()->can_view($user_id, (int) $order->get_customer_id())) {
+            wc_add_notice(__('Vous n\'êtes pas autorisé à consulter cette commande.', 'portail-entreprises'), 'error');
             wp_safe_redirect(wc_get_account_endpoint_url('b2b-approvals'));
             exit;
         }
@@ -662,9 +683,13 @@ class PE_Core {
     }
 
     /**
-     * Retourne les commandes WooCommerce de tous les membres d'une entreprise.
+     * Retourne les commandes WooCommerce des membres d'une entreprise.
+     *
+     * @param int      $company_id ID de l'entreprise.
+     * @param int      $limit      Nombre maximum de commandes.
+     * @param int|null $viewer_id  Si fourni, restreint aux commandes visibles par cet utilisateur.
      */
-    public static function get_company_orders(int $company_id, int $limit = 50): array {
+    public static function get_company_orders(int $company_id, int $limit = 50, ?int $viewer_id = null): array {
         global $wpdb;
 
         $user_ids = $wpdb->get_col(
@@ -679,6 +704,15 @@ class PE_Core {
         }
 
         $user_ids = array_map('intval', $user_ids);
+
+        // Applique les règles de visibilité du point de vue de l'utilisateur courant.
+        if (null !== $viewer_id && class_exists('PE_Order_Visibility')) {
+            $visible  = PE_Order_Visibility::get_instance()->get_visible_user_ids($viewer_id);
+            $user_ids = array_values(array_intersect($user_ids, $visible));
+            if (empty($user_ids)) {
+                return [];
+            }
+        }
 
         $orders = wc_get_orders([
             'customer' => $user_ids,

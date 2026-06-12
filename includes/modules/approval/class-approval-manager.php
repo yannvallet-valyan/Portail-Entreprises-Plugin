@@ -479,6 +479,37 @@ class PE_Approval_Manager {
     }
 
     /**
+     * Compte les demandes d'approbation « en attente » pertinentes pour un utilisateur.
+     *
+     * Pour les approbateurs (company_admin / purchase_manager) : toutes les demandes
+     * en attente de leur entreprise. Pour les autres (demandeurs…) : leurs propres
+     * demandes en attente.
+     */
+    public function get_pending_count_for_user(int $user_id): int {
+        global $wpdb;
+
+        if (PE_Permissions::user_can($user_id, 'approve_orders')) {
+            $company = PE_Permissions::get_user_company($user_id);
+            if (!$company) {
+                return 0;
+            }
+            return (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$wpdb->prefix}b2b_approval_requests WHERE company_id = %d AND status = 'pending'",
+                    (int) $company->id
+                )
+            );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->prefix}b2b_approval_requests WHERE requester_id = %d AND status = 'pending'",
+                $user_id
+            )
+        );
+    }
+
+    /**
      * Récupère une demande d'approbation par son ID.
      */
     public function get_request(int $request_id): ?object {

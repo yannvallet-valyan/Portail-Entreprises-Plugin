@@ -58,8 +58,12 @@ if ($is_manager) {
         "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
         (int) $company->id
     )));
-    // Membres autres que soi
-    $other_ids = array_filter($company_user_ids, fn($id) => $id !== $user_id);
+    // Membres autres que soi, restreints selon les règles de visibilité des commandes.
+    $visible_ids = PE_Order_Visibility::get_instance()->get_visible_user_ids($user_id);
+    $other_ids   = array_filter(
+        $company_user_ids,
+        fn($id) => $id !== $user_id && in_array($id, $visible_ids, true)
+    );
 
     // Filtres GET
     $member_filter_user   = isset($_GET['member_uid']) ? absint($_GET['member_uid']) : 0;

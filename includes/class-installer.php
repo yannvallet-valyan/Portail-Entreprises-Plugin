@@ -56,6 +56,7 @@ class PE_Installer {
             budget_annual DECIMAL(12,2) DEFAULT NULL,
             budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1,
             tdw_profile_slug VARCHAR(100) DEFAULT NULL,
+            order_visibility LONGTEXT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -237,6 +238,12 @@ class PE_Installer {
         $col_profile = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'tdw_profile_slug'");
         if (!$col_profile) {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN tdw_profile_slug VARCHAR(100) DEFAULT NULL");
+        }
+
+        // Migrate: add order_visibility column if missing (v1.4.0)
+        $col_visibility = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'order_visibility'");
+        if (!$col_visibility) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN order_visibility LONGTEXT NULL");
         }
 
         self::update_db_version();
