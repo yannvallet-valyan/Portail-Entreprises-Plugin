@@ -879,6 +879,21 @@
 }
 .pe-btn-link:hover { opacity: 1; }
 
+/* Crayon d'édition (centre de coût / référence) : fond blanc, indépendant du thème. */
+.pe-edit-meta-btn {
+    background: #fff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    padding: 4px 7px !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+}
+.pe-edit-meta-btn:hover {
+    background: #fff !important;
+    border-color: #bdbdbd !important;
+    opacity: 1;
+}
+
 /* Statuts de commande dans tableau entreprise */
 .pe-order-status { font-size: 0.8125rem; font-weight: 600; }
 .pe-order-status-processing { color: #2e7d32; }
