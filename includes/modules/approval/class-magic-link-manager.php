@@ -135,7 +135,10 @@ class PE_Magic_Link_Manager {
     }
 
     /**
-     * Retourne le bloc HTML (boutons) à insérer dans l'e-mail d'approbation.
+     * Retourne le bloc HTML (bouton) à insérer dans l'e-mail d'approbation.
+     *
+     * Un seul bouton « Voir la demande d'approbation » : la validation/le refus
+     * s'effectuent sur la page dédiée (façon panier) pour éviter la redondance.
      */
     public function get_email_buttons_html(int $request_id, int $approver_id): string {
         $links = $this->get_decision_links($request_id, $approver_id);
@@ -147,24 +150,18 @@ class PE_Magic_Link_Manager {
 
         return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">'
             . '<tr>'
-            . '<td style="padding-right:12px;">'
-            . '<a href="' . esc_url($links['approve']) . '" '
-            . 'style="display:inline-block;background:#28a745;color:#ffffff;text-decoration:none;'
-            . 'padding:14px 28px;border-radius:6px;font-weight:600;font-family:sans-serif;font-size:15px;">'
-            . esc_html__('✓ Valider la demande', 'portail-entreprises') . '</a>'
-            . '</td>'
             . '<td>'
-            . '<a href="' . esc_url($links['reject']) . '" '
-            . 'style="display:inline-block;background:#dc3545;color:#ffffff;text-decoration:none;'
+            . '<a href="' . esc_url($links['view']) . '" '
+            . 'style="display:inline-block;background:#2d6ebd;color:#ffffff;text-decoration:none;'
             . 'padding:14px 28px;border-radius:6px;font-weight:600;font-family:sans-serif;font-size:15px;">'
-            . esc_html__('✗ Refuser la demande', 'portail-entreprises') . '</a>'
+            . esc_html__('Voir la demande d\'approbation', 'portail-entreprises') . '</a>'
             . '</td>'
             . '</tr>'
             . '</table>'
             . '<p style="font-size:12px;color:#888;font-family:sans-serif;">'
             . sprintf(
                 /* translators: %s: validity duration */
-                esc_html__('Ces liens sont valables %s et utilisables une seule fois.', 'portail-entreprises'),
+                esc_html__('Ce lien est valable %s et utilisable une seule fois.', 'portail-entreprises'),
                 esc_html($validity_label)
             )
             . '</p>';
@@ -429,7 +426,7 @@ class PE_Magic_Link_Manager {
        ========================================================= */
 
     /**
-     * Affiche la page de décision (récap + boutons).
+     * Affiche la page de décision sous forme de panier (récap façon WooCommerce + boutons).
      */
     private function render_decision_page(object $token, object $request, string $preselect = ''): void {
         $order       = wc_get_order((int) $request->order_id);
@@ -449,110 +446,213 @@ class PE_Magic_Link_Manager {
 
         $raw_token = isset($_REQUEST['token']) ? sanitize_text_field(wp_unslash($_REQUEST['token'])) : '';
 
+        $customer_note = $order ? $order->get_customer_note() : '';
+        $reference     = $order ? $order->get_meta('_b2b_personal_reference') : '';
+        $cost_center   = $order ? $order->get_meta('_b2b_cost_center_label') : '';
+
+        // Calcul des remises : pour chaque ligne, on compare le prix catalogue
+        // (regular_price) au prix réellement facturé. La remise totale agrège ces
+        // écarts ainsi que les éventuels coupons (sous-total vs total des lignes).
+        $cart_subtotal = 0.0; // somme des prix catalogue (avant remise)
+        $lines_paid    = 0.0; // somme des montants facturés
+        $coupon_codes  = [];
+        if ($order) {
+            foreach ($order->get_items() as $line_item) {
+                $line_product = $line_item->get_product();
+                $line_qty     = (int) $line_item->get_quantity();
+                $line_paid    = (float) $line_item->get_subtotal();
+                $regular_unit = $line_product ? (float) $line_product->get_regular_price() : 0.0;
+                $regular_line = $regular_unit > 0 ? $regular_unit * $line_qty : $line_paid;
+                if ($regular_line < $line_paid) {
+                    $regular_line = $line_paid;
+                }
+                $cart_subtotal += $regular_line;
+                $lines_paid    += (float) $line_item->get_total();
+            }
+            $coupon_codes = $order->get_coupon_codes();
+        }
+        $discount = $cart_subtotal - $lines_paid;
+
         ob_start();
         ?>
-        <div class="pe-ml-card">
-            <h1><?php esc_html_e('Demande d\'approbation', 'portail-entreprises'); ?></h1>
+        <div class="pe-approval woocommerce">
+            <h1 class="pe-approval-title"><?php esc_html_e('Demande d\'approbation', 'portail-entreprises'); ?></h1>
 
-            <table class="pe-ml-info">
-                <tr>
-                    <th><?php esc_html_e('N° de demande', 'portail-entreprises'); ?></th>
-                    <td>#<?php echo esc_html((string) $request->id); ?></td>
-                </tr>
+            <p class="pe-approval-intro">
+                <?php
+                printf(
+                    /* translators: 1: requester name, 2: company name */
+                    esc_html__('Demande n° %1$s soumise par %2$s.', 'portail-entreprises'),
+                    '<strong>#' . esc_html((string) $request->id) . '</strong>',
+                    '<strong>' . esc_html($requester_name ?: '—') . ($company ? ' — ' . esc_html($company->name) : '') . '</strong>'
+                );
+                ?>
+                <br />
+                <span class="pe-approval-date"><?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($request->created_at))); ?></span>
+            </p>
+
+            <div class="pe-approval-cart">
                 <?php if ($order) : ?>
-                <tr>
-                    <th><?php esc_html_e('N° de commande', 'portail-entreprises'); ?></th>
-                    <td>#<?php echo esc_html($order->get_order_number()); ?></td>
-                </tr>
+                <table class="shop_table shop_table_responsive cart pe-approval-cart-table">
+                    <thead>
+                        <tr>
+                            <th class="product-thumbnail">&nbsp;</th>
+                            <th class="product-name"><?php esc_html_e('Produit', 'portail-entreprises'); ?></th>
+                            <th class="product-price"><?php esc_html_e('Prix', 'portail-entreprises'); ?></th>
+                            <th class="product-quantity"><?php esc_html_e('Quantité', 'portail-entreprises'); ?></th>
+                            <th class="product-subtotal"><?php esc_html_e('Sous-total', 'portail-entreprises'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($order->get_items() as $item) : ?>
+                        <?php
+                        $product   = $item->get_product();
+                        $quantity  = (int) $item->get_quantity();
+                        $line_paid = (float) $item->get_subtotal();
+                        $unit      = $quantity > 0 ? $line_paid / $quantity : $line_paid;
+                        $sku       = $product ? $product->get_sku() : '';
+                        $thumbnail = $product ? $product->get_image('woocommerce_thumbnail') : '';
+                        $meta_html = wc_display_item_meta($item, ['echo' => false]);
+                        $permalink = ($product && $product->is_visible()) ? $product->get_permalink() : '';
+
+                        // Remise éventuelle de la ligne : prix catalogue vs prix facturé.
+                        $regular_unit = $product ? (float) $product->get_regular_price() : 0.0;
+                        $has_discount = $regular_unit > $unit + 0.01;
+                        $regular_line = $regular_unit * $quantity;
+                        $pct          = ($has_discount && $regular_unit > 0)
+                            ? (int) round(($regular_unit - $unit) / $regular_unit * 100)
+                            : 0;
+                        ?>
+                        <tr class="cart_item">
+                            <td class="product-thumbnail">
+                                <?php if ($permalink) : ?>
+                                <a href="<?php echo esc_url($permalink); ?>"><?php echo wp_kses_post($thumbnail); ?></a>
+                                <?php else : ?>
+                                <?php echo wp_kses_post($thumbnail); ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="product-name" data-title="<?php esc_attr_e('Produit', 'portail-entreprises'); ?>">
+                                <?php if ($permalink) : ?>
+                                <a class="pe-approval-product-name" href="<?php echo esc_url($permalink); ?>"><?php echo esc_html($item->get_name()); ?></a>
+                                <?php else : ?>
+                                <span class="pe-approval-product-name"><?php echo esc_html($item->get_name()); ?></span>
+                                <?php endif; ?>
+                                <?php if ($sku) : ?>
+                                <span class="pe-approval-sku"><?php esc_html_e('Réf :', 'portail-entreprises'); ?> <?php echo esc_html($sku); ?></span>
+                                <?php endif; ?>
+                                <?php echo wp_kses_post($meta_html); ?>
+                            </td>
+                            <td class="product-price" data-title="<?php esc_attr_e('Prix', 'portail-entreprises'); ?>">
+                                <?php if ($has_discount) : ?>
+                                <del><?php echo wp_kses_post(wc_price($regular_unit)); ?></del>
+                                <ins><?php echo wp_kses_post(wc_price($unit)); ?></ins>
+                                <span class="pe-approval-pct">−<?php echo esc_html((string) $pct); ?> %</span>
+                                <?php else : ?>
+                                <?php echo wp_kses_post(wc_price($unit)); ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="product-quantity" data-title="<?php esc_attr_e('Quantité', 'portail-entreprises'); ?>">
+                                <?php echo esc_html((string) $quantity); ?>
+                            </td>
+                            <td class="product-subtotal" data-title="<?php esc_attr_e('Sous-total', 'portail-entreprises'); ?>">
+                                <?php if ($has_discount) : ?>
+                                <del><?php echo wp_kses_post(wc_price($regular_line)); ?></del>
+                                <ins><?php echo wp_kses_post(wc_price($line_paid)); ?></ins>
+                                <?php else : ?>
+                                <?php echo wp_kses_post(wc_price($line_paid)); ?>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
                 <?php endif; ?>
-                <?php if ($company) : ?>
-                <tr>
-                    <th><?php esc_html_e('Société', 'portail-entreprises'); ?></th>
-                    <td><?php echo esc_html($company->name); ?></td>
-                </tr>
-                <?php endif; ?>
-                <tr>
-                    <th><?php esc_html_e('Demandeur', 'portail-entreprises'); ?></th>
-                    <td><?php echo esc_html($requester_name ?: '—'); ?></td>
-                </tr>
-                <tr>
-                    <th><?php esc_html_e('Date', 'portail-entreprises'); ?></th>
-                    <td><?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($request->created_at))); ?></td>
-                </tr>
-                <tr>
-                    <th><?php esc_html_e('Montant total', 'portail-entreprises'); ?></th>
-                    <td class="pe-ml-amount"><?php echo wp_kses_post(wc_price($request->amount)); ?></td>
-                </tr>
-            </table>
 
-            <?php if ($order) : ?>
-            <h2><?php esc_html_e('Articles demandés', 'portail-entreprises'); ?></h2>
-            <table class="pe-ml-items">
-                <thead>
-                    <tr>
-                        <th><?php esc_html_e('Produit', 'portail-entreprises'); ?></th>
-                        <th><?php esc_html_e('Qté', 'portail-entreprises'); ?></th>
-                        <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($order->get_items() as $item) : ?>
-                    <tr>
-                        <td><?php echo esc_html($item->get_name()); ?></td>
-                        <td><?php echo esc_html((string) $item->get_quantity()); ?></td>
-                        <td><?php echo wp_kses_post(wc_price($item->get_total())); ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-            <?php
-                $customer_note = $order->get_customer_note();
-                $reference     = $order->get_meta('_b2b_personal_reference');
-                $cost_center   = $order->get_meta('_b2b_cost_center_label');
-            ?>
-            <?php if ($cost_center) : ?>
-                <p><strong><?php esc_html_e('Centre de coût :', 'portail-entreprises'); ?></strong> <?php echo esc_html($cost_center); ?></p>
-            <?php endif; ?>
-            <?php if ($reference) : ?>
-                <p><strong><?php esc_html_e('Référence :', 'portail-entreprises'); ?></strong> <?php echo esc_html($reference); ?></p>
-            <?php endif; ?>
-            <?php if ($customer_note) : ?>
-                <p><strong><?php esc_html_e('Commentaire :', 'portail-entreprises'); ?></strong> <?php echo esc_html($customer_note); ?></p>
-            <?php endif; ?>
-            <?php endif; ?>
+                <div class="cart-collaterals">
+                    <div class="cart_totals">
+                        <h2><?php esc_html_e('Total panier', 'portail-entreprises'); ?></h2>
+                        <table class="shop_table shop_table_responsive">
+                            <?php if ($order) : ?>
+                            <tr class="cart-subtotal">
+                                <th><?php esc_html_e('Sous-total', 'portail-entreprises'); ?></th>
+                                <td><?php echo wp_kses_post(wc_price($cart_subtotal)); ?></td>
+                            </tr>
+                            <?php if ($discount > 0.0001) : ?>
+                            <tr class="cart-discount">
+                                <th>
+                                    <?php esc_html_e('Remise', 'portail-entreprises'); ?>
+                                    <?php if (!empty($coupon_codes)) : ?>
+                                    <span class="pe-approval-coupons">(<?php echo esc_html(implode(', ', $coupon_codes)); ?>)</span>
+                                    <?php endif; ?>
+                                </th>
+                                <td>−<?php echo wp_kses_post(wc_price($discount)); ?></td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php foreach ($order->get_items('shipping') as $shipping_item) : ?>
+                            <tr class="shipping">
+                                <th><?php echo esc_html($shipping_item->get_name()); ?></th>
+                                <td><?php echo wp_kses_post(wc_price($shipping_item->get_total())); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <tr class="order-total">
+                                <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
+                                <td><?php echo wp_kses_post($order->get_formatted_order_total()); ?></td>
+                            </tr>
+                            <?php else : ?>
+                            <tr class="order-total">
+                                <th><?php esc_html_e('Total', 'portail-entreprises'); ?></th>
+                                <td><?php echo wp_kses_post(wc_price($request->amount)); ?></td>
+                            </tr>
+                            <?php endif; ?>
+                        </table>
 
-            <form method="post" action="<?php echo esc_url(home_url('/approval/')); ?>" class="pe-ml-form">
-                <?php wp_nonce_field('pe_magic_decision_' . (int) $request->id, 'pe_magic_nonce'); ?>
-                <input type="hidden" name="pe_approval" value="1" />
-                <input type="hidden" name="request" value="<?php echo esc_attr((int) $request->id); ?>" />
-                <input type="hidden" name="token" value="<?php echo esc_attr($raw_token); ?>" />
+                        <?php if ($cost_center || $reference || $customer_note) : ?>
+                        <div class="pe-approval-meta">
+                            <?php if ($cost_center) : ?>
+                            <p><strong><?php esc_html_e('Centre de coût :', 'portail-entreprises'); ?></strong> <?php echo esc_html($cost_center); ?></p>
+                            <?php endif; ?>
+                            <?php if ($reference) : ?>
+                            <p><strong><?php esc_html_e('Référence :', 'portail-entreprises'); ?></strong> <?php echo esc_html($reference); ?></p>
+                            <?php endif; ?>
+                            <?php if ($customer_note) : ?>
+                            <p><strong><?php esc_html_e('Commentaire :', 'portail-entreprises'); ?></strong> <?php echo esc_html($customer_note); ?></p>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
 
-                <div class="pe-ml-reject-reason" style="<?php echo 'reject' === $preselect ? '' : 'display:none;'; ?>">
-                    <label for="pe-ml-reason"><?php esc_html_e('Motif du refus', 'portail-entreprises'); ?></label>
-                    <textarea id="pe-ml-reason" name="reason" rows="3"
-                              placeholder="<?php esc_attr_e('Indiquez le motif du refus…', 'portail-entreprises'); ?>"></textarea>
+                        <form method="post" action="<?php echo esc_url(home_url('/approval/')); ?>" class="pe-approval-form wc-proceed-to-checkout">
+                            <?php wp_nonce_field('pe_magic_decision_' . (int) $request->id, 'pe_magic_nonce'); ?>
+                            <input type="hidden" name="pe_approval" value="1" />
+                            <input type="hidden" name="request" value="<?php echo esc_attr((int) $request->id); ?>" />
+                            <input type="hidden" name="token" value="<?php echo esc_attr($raw_token); ?>" />
+
+                            <div class="pe-approval-reject-reason" style="<?php echo 'reject' === $preselect ? '' : 'display:none;'; ?>">
+                                <label for="pe-approval-reason"><?php esc_html_e('Motif du refus', 'portail-entreprises'); ?></label>
+                                <textarea id="pe-approval-reason" name="reason" rows="3"
+                                          placeholder="<?php esc_attr_e('Indiquez le motif du refus…', 'portail-entreprises'); ?>"></textarea>
+                            </div>
+
+                            <button type="submit" name="decision" value="approve" class="button alt pe-approval-btn pe-approval-btn-approve">
+                                <?php esc_html_e('Valider la demande', 'portail-entreprises'); ?>
+                            </button>
+                            <button type="button" class="button pe-approval-btn pe-approval-btn-reject" id="pe-approval-show-reject">
+                                <?php esc_html_e('Refuser la demande', 'portail-entreprises'); ?>
+                            </button>
+                            <button type="submit" name="decision" value="reject" class="button pe-approval-btn pe-approval-btn-reject"
+                                    id="pe-approval-confirm-reject" style="<?php echo 'reject' === $preselect ? '' : 'display:none;'; ?>">
+                                <?php esc_html_e('Confirmer le refus', 'portail-entreprises'); ?>
+                            </button>
+                        </form>
+                    </div>
                 </div>
-
-                <div class="pe-ml-actions">
-                    <button type="submit" name="decision" value="approve" class="pe-ml-btn pe-ml-btn-approve">
-                        <?php esc_html_e('Valider la demande', 'portail-entreprises'); ?>
-                    </button>
-                    <button type="button" class="pe-ml-btn pe-ml-btn-reject" id="pe-ml-show-reject">
-                        <?php esc_html_e('Refuser la demande', 'portail-entreprises'); ?>
-                    </button>
-                    <button type="submit" name="decision" value="reject" class="pe-ml-btn pe-ml-btn-reject"
-                            id="pe-ml-confirm-reject" style="<?php echo 'reject' === $preselect ? '' : 'display:none;'; ?>">
-                        <?php esc_html_e('Confirmer le refus', 'portail-entreprises'); ?>
-                    </button>
-                </div>
-            </form>
+            </div>
 
             <script>
-                document.getElementById('pe-ml-show-reject').addEventListener('click', function () {
-                    document.querySelector('.pe-ml-reject-reason').style.display = 'block';
+                document.getElementById('pe-approval-show-reject').addEventListener('click', function () {
+                    document.querySelector('.pe-approval-reject-reason').style.display = 'block';
                     this.style.display = 'none';
-                    document.getElementById('pe-ml-confirm-reject').style.display = 'inline-block';
-                    document.getElementById('pe-ml-reason').focus();
+                    document.getElementById('pe-approval-confirm-reject').style.display = 'inline-block';
+                    document.getElementById('pe-approval-reason').focus();
                 });
             </script>
         </div>
@@ -590,41 +690,84 @@ class PE_Magic_Link_Manager {
     }
 
     /**
-     * Layout HTML autonome (indépendant du thème, compatible cache/mobile).
+     * Layout intégré au thème (en-tête/pied du site) pour reproduire la page panier.
+     *
+     * La page hérite ainsi de l'habillage WooCommerce / du thème (Woodmart, etc.),
+     * tout en restant non indexable.
      */
     private function render_layout(string $title, string $content): void {
         status_header(200);
-        header('Content-Type: text/html; charset=utf-8');
+
+        // Titre du document (onglet navigateur).
+        $full_title = $title . ' — ' . get_bloginfo('name');
+        add_filter('pre_get_document_title', static function () use ($full_title) {
+            return $full_title;
+        });
+        // Forcer le titre auprès des principaux plugins SEO.
+        add_filter('wpseo_title', static function () use ($full_title) {
+            return $full_title;
+        });
+        add_filter('rank_math/frontend/title', static function () use ($full_title) {
+            return $full_title;
+        });
+
+        // Masquer la barre de titre du thème (affiche « Blog » sur cette page virtuelle) :
+        // notre propre titre « Demande d'approbation » prend le relais dans le contenu.
+        add_filter('woodmart_page_title', '__return_false');
+        add_filter('woodmart_page_title_string', static function () use ($title) {
+            return $title;
+        });
+
+        add_action('wp_head', static function () {
+            echo '<meta name="robots" content="noindex,nofollow" />' . "\n";
+        });
+        // Styles spécifiques à la page d'approbation.
+        add_action('wp_head', [$this, 'output_layout_styles']);
+
+        get_header();
         ?>
-<!DOCTYPE html>
-<html lang="<?php echo esc_attr(substr(get_locale(), 0, 2)); ?>">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex,nofollow" />
-    <title><?php echo esc_html($title); ?> — <?php echo esc_html(get_bloginfo('name')); ?></title>
+        <div class="pe-approval-page">
+            <?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — contenu construit et échappé en interne ?>
+        </div>
+        <?php
+        get_footer();
+    }
+
+    /**
+     * Styles de la page d'approbation (panier + messages), injectés dans le thème.
+     */
+    public function output_layout_styles(): void {
+        ?>
     <style>
-        * { box-sizing: border-box; }
-        body { margin:0; padding:20px; background:#f0f2f5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#1a2744; }
-        .pe-ml-card { max-width:640px; margin:40px auto; background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(26,39,68,.12); padding:32px; }
-        .pe-ml-card h1 { font-size:1.5rem; margin:0 0 20px; color:#1a2744; }
-        .pe-ml-card h2 { font-size:1.1rem; margin:24px 0 12px; color:#1a2744; }
-        .pe-ml-info, .pe-ml-items { width:100%; border-collapse:collapse; margin-bottom:8px; }
-        .pe-ml-info th { text-align:left; padding:8px 12px 8px 0; color:#666; font-weight:600; width:40%; vertical-align:top; }
-        .pe-ml-info td { padding:8px 0; }
-        .pe-ml-amount { font-size:1.25rem; font-weight:700; color:#2d6ebd; }
-        .pe-ml-items th, .pe-ml-items td { text-align:left; padding:8px; border-bottom:1px solid #eee; }
-        .pe-ml-items th { background:#f8f9fa; font-size:.8rem; text-transform:uppercase; color:#666; }
-        .pe-ml-form { margin-top:24px; }
-        .pe-ml-reject-reason { margin-bottom:16px; }
-        .pe-ml-reject-reason label { display:block; font-weight:600; margin-bottom:6px; }
-        .pe-ml-reject-reason textarea { width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:inherit; }
-        .pe-ml-actions { display:flex; gap:12px; flex-wrap:wrap; }
-        .pe-ml-btn { flex:1; min-width:160px; padding:14px 24px; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; color:#fff; }
-        .pe-ml-btn-approve { background:#28a745; }
-        .pe-ml-btn-approve:hover { background:#218838; }
-        .pe-ml-btn-reject { background:#dc3545; }
-        .pe-ml-btn-reject:hover { background:#c82333; }
+        /* Masque la barre de titre du thème (« Blog ») sur cette page virtuelle. */
+        .wd-page-title, .page-title.title-blog { display:none !important; }
+        .pe-approval-page { max-width:1200px; margin:40px auto; padding:0 20px; }
+        .pe-approval-title { margin:0 0 12px; }
+        .pe-approval-intro { margin:0 0 24px; color:#555; }
+        .pe-approval-date { font-size:.9em; color:#888; }
+        .pe-approval-cart-table .product-thumbnail img { width:64px; height:auto; }
+        .pe-approval-product-name { display:block; font-weight:600; }
+        .pe-approval-sku { display:block; font-size:.85em; color:#888; margin-top:2px; }
+        .pe-approval-cart-table del { color:#999; font-weight:400; margin-right:6px; }
+        .pe-approval-cart-table ins { text-decoration:none; font-weight:600; }
+        .pe-approval-pct { display:inline-block; font-size:.8em; color:#dc3545; font-weight:600; margin-left:4px; white-space:nowrap; }
+        .pe-approval-cart .cart-collaterals { margin-top:32px; overflow:hidden; }
+        .pe-approval-cart .cart_totals { max-width:520px; margin:0 auto; float:none; width:100%; }
+        .pe-approval-cart .cart_totals h2 { text-align:center; }
+        .pe-approval-cart .cart_totals > table { width:100%; }
+        .pe-approval-coupons { font-weight:400; font-size:.85em; color:#888; }
+        .pe-approval-meta { margin:16px 0; font-size:.95em; }
+        .pe-approval-meta p { margin:0 0 6px; }
+        .pe-approval-reject-reason { margin:16px 0; }
+        .pe-approval-reject-reason label { display:block; font-weight:600; margin-bottom:6px; }
+        .pe-approval-reject-reason textarea { width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:inherit; }
+        .pe-approval-form .pe-approval-btn { display:block; width:100%; margin:8px 0 0; text-align:center; }
+        .pe-approval-btn-approve { background:#28a745 !important; border-color:#28a745 !important; color:#fff !important; }
+        .pe-approval-btn-approve:hover { background:#218838 !important; border-color:#218838 !important; }
+        .pe-approval-btn-reject { background:#dc3545 !important; border-color:#dc3545 !important; color:#fff !important; }
+        .pe-approval-btn-reject:hover { background:#c82333 !important; border-color:#c82333 !important; }
+        /* Messages (succès / erreur / info) */
+        .pe-ml-card { max-width:640px; margin:0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 4px 24px rgba(26,39,68,.08); padding:32px; }
         .pe-ml-message { text-align:center; }
         .pe-ml-icon { font-size:48px; width:88px; height:88px; line-height:88px; border-radius:50%; margin:0 auto 20px; color:#fff; }
         .pe-ml-success .pe-ml-icon { background:#28a745; }
@@ -632,11 +775,6 @@ class PE_Magic_Link_Manager {
         .pe-ml-info .pe-ml-icon { background:#2d6ebd; }
         .pe-ml-home { display:inline-block; margin-top:20px; color:#2d6ebd; text-decoration:none; font-weight:600; }
     </style>
-</head>
-<body>
-    <?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — contenu construit et échappé en interne ?>
-</body>
-</html>
         <?php
     }
 
