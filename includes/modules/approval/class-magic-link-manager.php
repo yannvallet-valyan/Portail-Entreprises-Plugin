@@ -450,20 +450,28 @@ class PE_Magic_Link_Manager {
         $reference     = $order ? $order->get_meta('_b2b_personal_reference') : '';
         $cost_center   = $order ? $order->get_meta('_b2b_cost_center_label') : '';
 
-        // Calcul des remises : différence entre le sous-total (avant remise) et le
-        // total des lignes (après remises produit/admin et coupons).
-        $cart_subtotal = 0.0;
-        $discount      = 0.0;
+        // Calcul des remises : pour chaque ligne, on compare le prix catalogue
+        // (regular_price) au prix réellement facturé. La remise totale agrège ces
+        // écarts ainsi que les éventuels coupons (sous-total vs total des lignes).
+        $cart_subtotal = 0.0; // somme des prix catalogue (avant remise)
+        $lines_paid    = 0.0; // somme des montants facturés
         $coupon_codes  = [];
         if ($order) {
-            $cart_subtotal = (float) $order->get_subtotal();
-            $items_total   = 0.0;
             foreach ($order->get_items() as $line_item) {
-                $items_total += (float) $line_item->get_total();
+                $line_product = $line_item->get_product();
+                $line_qty     = (int) $line_item->get_quantity();
+                $line_paid    = (float) $line_item->get_subtotal();
+                $regular_unit = $line_product ? (float) $line_product->get_regular_price() : 0.0;
+                $regular_line = $regular_unit > 0 ? $regular_unit * $line_qty : $line_paid;
+                if ($regular_line < $line_paid) {
+                    $regular_line = $line_paid;
+                }
+                $cart_subtotal += $regular_line;
+                $lines_paid    += (float) $line_item->get_total();
             }
-            $discount     = $cart_subtotal - $items_total;
             $coupon_codes = $order->get_coupon_codes();
         }
+        $discount = $cart_subtotal - $lines_paid;
 
         ob_start();
         ?>
@@ -500,28 +508,59 @@ class PE_Magic_Link_Manager {
                         <?php
                         $product   = $item->get_product();
                         $quantity  = (int) $item->get_quantity();
-                        $unit      = $quantity > 0 ? (float) $item->get_subtotal() / $quantity : (float) $item->get_subtotal();
+                        $line_paid = (float) $item->get_subtotal();
+                        $unit      = $quantity > 0 ? $line_paid / $quantity : $line_paid;
                         $sku       = $product ? $product->get_sku() : '';
                         $thumbnail = $product ? $product->get_image('woocommerce_thumbnail') : '';
                         $meta_html = wc_display_item_meta($item, ['echo' => false]);
+                        $permalink = ($product && $product->is_visible()) ? $product->get_permalink() : '';
+
+                        // Remise éventuelle de la ligne : prix catalogue vs prix facturé.
+                        $regular_unit = $product ? (float) $product->get_regular_price() : 0.0;
+                        $has_discount = $regular_unit > $unit + 0.01;
+                        $regular_line = $regular_unit * $quantity;
+                        $pct          = ($has_discount && $regular_unit > 0)
+                            ? (int) round(($regular_unit - $unit) / $regular_unit * 100)
+                            : 0;
                         ?>
                         <tr class="cart_item">
-                            <td class="product-thumbnail"><?php echo wp_kses_post($thumbnail); ?></td>
+                            <td class="product-thumbnail">
+                                <?php if ($permalink) : ?>
+                                <a href="<?php echo esc_url($permalink); ?>"><?php echo wp_kses_post($thumbnail); ?></a>
+                                <?php else : ?>
+                                <?php echo wp_kses_post($thumbnail); ?>
+                                <?php endif; ?>
+                            </td>
                             <td class="product-name" data-title="<?php esc_attr_e('Produit', 'portail-entreprises'); ?>">
+                                <?php if ($permalink) : ?>
+                                <a class="pe-approval-product-name" href="<?php echo esc_url($permalink); ?>"><?php echo esc_html($item->get_name()); ?></a>
+                                <?php else : ?>
                                 <span class="pe-approval-product-name"><?php echo esc_html($item->get_name()); ?></span>
+                                <?php endif; ?>
                                 <?php if ($sku) : ?>
                                 <span class="pe-approval-sku"><?php esc_html_e('Réf :', 'portail-entreprises'); ?> <?php echo esc_html($sku); ?></span>
                                 <?php endif; ?>
                                 <?php echo wp_kses_post($meta_html); ?>
                             </td>
                             <td class="product-price" data-title="<?php esc_attr_e('Prix', 'portail-entreprises'); ?>">
+                                <?php if ($has_discount) : ?>
+                                <del><?php echo wp_kses_post(wc_price($regular_unit)); ?></del>
+                                <ins><?php echo wp_kses_post(wc_price($unit)); ?></ins>
+                                <span class="pe-approval-pct">−<?php echo esc_html((string) $pct); ?> %</span>
+                                <?php else : ?>
                                 <?php echo wp_kses_post(wc_price($unit)); ?>
+                                <?php endif; ?>
                             </td>
                             <td class="product-quantity" data-title="<?php esc_attr_e('Quantité', 'portail-entreprises'); ?>">
                                 <?php echo esc_html((string) $quantity); ?>
                             </td>
                             <td class="product-subtotal" data-title="<?php esc_attr_e('Sous-total', 'portail-entreprises'); ?>">
-                                <?php echo wp_kses_post(wc_price($item->get_subtotal())); ?>
+                                <?php if ($has_discount) : ?>
+                                <del><?php echo wp_kses_post(wc_price($regular_line)); ?></del>
+                                <ins><?php echo wp_kses_post(wc_price($line_paid)); ?></ins>
+                                <?php else : ?>
+                                <?php echo wp_kses_post(wc_price($line_paid)); ?>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -700,6 +739,8 @@ class PE_Magic_Link_Manager {
     public function output_layout_styles(): void {
         ?>
     <style>
+        /* Masque la barre de titre du thème (« Blog ») sur cette page virtuelle. */
+        .wd-page-title, .page-title.title-blog { display:none !important; }
         .pe-approval-page { max-width:1200px; margin:40px auto; padding:0 20px; }
         .pe-approval-title { margin:0 0 12px; }
         .pe-approval-intro { margin:0 0 24px; color:#555; }
@@ -707,6 +748,9 @@ class PE_Magic_Link_Manager {
         .pe-approval-cart-table .product-thumbnail img { width:64px; height:auto; }
         .pe-approval-product-name { display:block; font-weight:600; }
         .pe-approval-sku { display:block; font-size:.85em; color:#888; margin-top:2px; }
+        .pe-approval-cart-table del { color:#999; font-weight:400; margin-right:6px; }
+        .pe-approval-cart-table ins { text-decoration:none; font-weight:600; }
+        .pe-approval-pct { display:inline-block; font-size:.8em; color:#dc3545; font-weight:600; margin-left:4px; white-space:nowrap; }
         .pe-approval-cart .cart-collaterals { margin-top:32px; overflow:hidden; }
         .pe-approval-cart .cart_totals { max-width:520px; margin:0 auto; float:none; width:100%; }
         .pe-approval-cart .cart_totals h2 { text-align:center; }
