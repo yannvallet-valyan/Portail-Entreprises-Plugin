@@ -46,32 +46,34 @@ $my_orders = wc_get_orders([
     'status'      => $all_statuses,
 ]);
 
-// Commandes des membres (onglet 2 — admins/managers uniquement)
+// Commandes des membres visibles (onglet 2 — selon les règles de visibilité)
 $member_orders      = [];
 $member_filter_user = 0;
 $member_filter_status = '';
 $company_members    = [];
 
-if ($is_manager) {
-    global $wpdb;
-    $company_user_ids = array_map('intval', $wpdb->get_col($wpdb->prepare(
-        "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
-        (int) $company->id
-    )));
-    // Membres autres que soi, restreints selon les règles de visibilité des commandes.
-    $visible_ids = PE_Order_Visibility::get_instance()->get_visible_user_ids($user_id);
-    $other_ids   = array_filter(
-        $company_user_ids,
-        fn($id) => $id !== $user_id && in_array($id, $visible_ids, true)
-    );
+global $wpdb;
+$company_user_ids = array_map('intval', $wpdb->get_col($wpdb->prepare(
+    "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+    (int) $company->id
+)));
 
+// Membres autres que soi dont l'utilisateur peut voir les commandes (visibilité).
+$visible_ids = PE_Order_Visibility::get_instance()->get_visible_user_ids($user_id);
+$other_ids   = array_values(array_filter(
+    $company_user_ids,
+    fn($id) => $id !== $user_id && in_array($id, $visible_ids, true)
+));
+$can_see_members = !empty($other_ids);
+
+if ($can_see_members) {
     // Filtres GET
     $member_filter_user   = isset($_GET['member_uid']) ? absint($_GET['member_uid']) : 0;
     $member_filter_status = isset($_GET['member_status']) ? sanitize_key($_GET['member_status']) : '';
 
     $query_ids = $member_filter_user && in_array($member_filter_user, $other_ids, true)
         ? [$member_filter_user]
-        : (empty($other_ids) ? [-1] : $other_ids);
+        : $other_ids;
 
     $member_query = [
         'customer_id' => $query_ids,
@@ -85,7 +87,7 @@ if ($is_manager) {
     } elseif ($member_filter_status) {
         $member_query['status'] = [$member_filter_status];
     }
-    $member_orders = empty($other_ids) ? [] : wc_get_orders($member_query);
+    $member_orders = wc_get_orders($member_query);
 
     // Liste membres pour le filtre
     foreach ($other_ids as $mid) {
@@ -95,7 +97,7 @@ if ($is_manager) {
 }
 
 // Onglet actif (paramètre GET, défaut : mes-commandes)
-$active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $is_manager) ? 'membres' : 'mes-commandes';
+$active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $can_see_members) ? 'membres' : 'mes-commandes';
 $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
 ?>
 
@@ -225,7 +227,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
     <div class="pe-section">
         <h3 class="pe-section-subtitle"><?php esc_html_e('Commandes', 'portail-entreprises'); ?></h3>
 
-        <?php if ($is_manager) : ?>
+        <?php if ($can_see_members) : ?>
         <!-- Onglets -->
         <div class="pe-tabs" style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e5e7eb;">
             <a href="<?php echo esc_url(add_query_arg('orders_tab', 'mes-commandes', $tab_base_url)); ?>"
@@ -243,7 +245,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
         </div>
         <?php endif; ?>
 
-        <?php if ('membres' === $active_tab && $is_manager) : ?>
+        <?php if ('membres' === $active_tab && $can_see_members) : ?>
         <!-- Filtres membres -->
         <form method="get" action="" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:14px 0 12px;">
             <input type="hidden" name="orders_tab" value="membres" />
