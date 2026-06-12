@@ -27,38 +27,39 @@ $user_count      = 0;
 $recent_orders   = [];
 
 if (in_array($role, ['company_admin', 'purchase_manager'], true)) {
-    $pending_requests = $approval_mgr->get_company_requests((int) $company->id, 'pending');
-    $pending_count    = count($pending_requests);
-    $company_users    = $company_mgr->get_company_users((int) $company->id);
-    $user_count       = count($company_users);
+    // Compteurs via requêtes COUNT (sans charger les enregistrements complets).
+    $pending_count = $approval_mgr->get_pending_count_for_user($user_id);
+    $user_count    = $company_mgr->count_company_users((int) $company->id);
 }
 
 $all_statuses  = ['wc-pending-approval', 'wc-processing', 'wc-completed', 'wc-on-hold', 'wc-pending', 'wc-cancelled'];
 $status_labels = wc_get_order_statuses();
 $is_manager    = in_array($role, ['company_admin', 'purchase_manager'], true);
 
-// Mes commandes (onglet 1 — toujours)
-$my_orders = wc_get_orders([
-    'customer_id' => $user_id,
-    'limit'       => -1,
-    'orderby'     => 'date',
-    'order'       => 'DESC',
-    'status'      => $all_statuses,
-]);
+// Filtres de recherche : dates appliquées en base (rapide), numéro filtré en PHP.
+$order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
+$date_from    = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
+$date_to      = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
+$from_ts      = $date_from ? strtotime($date_from . ' 00:00:00') : 0;
+$to_ts        = $date_to ? strtotime($date_to . ' 23:59:59') : 0;
+$search_num   = ltrim($order_search, '#');
+$has_filters  = ('' !== $order_search) || ('' !== $date_from) || ('' !== $date_to);
 
-// Commandes des membres visibles (onglet 2 — selon les règles de visibilité)
-$member_orders      = [];
-$member_filter_user = 0;
-$member_filter_status = '';
-$company_members    = [];
+$date_created = '';
+if ($from_ts && $to_ts) {
+    $date_created = $from_ts . '...' . $to_ts;
+} elseif ($from_ts) {
+    $date_created = '>=' . $from_ts;
+} elseif ($to_ts) {
+    $date_created = '<=' . $to_ts;
+}
 
+// Membres dont l'utilisateur peut voir les commandes (visibilité).
 global $wpdb;
 $company_user_ids = array_map('intval', $wpdb->get_col($wpdb->prepare(
     "SELECT user_id FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
     (int) $company->id
 )));
-
-// Membres autres que soi dont l'utilisateur peut voir les commandes (visibilité).
 $visible_ids = PE_Order_Visibility::get_instance()->get_visible_user_ids($user_id);
 $other_ids   = array_values(array_filter(
     $company_user_ids,
@@ -66,39 +67,68 @@ $other_ids   = array_values(array_filter(
 ));
 $can_see_members = !empty($other_ids);
 
+// Onglet actif + base d'URL.
+$active_tab   = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $can_see_members) ? 'membres' : 'mes-commandes';
+$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', 'order_search', 'date_from', 'date_to']);
+
+// Filtres « membres » + liste pour le sélecteur (uniquement si pertinent).
+$member_filter_user   = 0;
+$member_filter_status = '';
+$company_members      = [];
 if ($can_see_members) {
-    // Filtres GET
     $member_filter_user   = isset($_GET['member_uid']) ? absint($_GET['member_uid']) : 0;
     $member_filter_status = isset($_GET['member_status']) ? sanitize_key($_GET['member_status']) : '';
-
-    $query_ids = $member_filter_user && in_array($member_filter_user, $other_ids, true)
-        ? [$member_filter_user]
-        : $other_ids;
-
-    $member_query = [
-        'customer_id' => $query_ids,
-        'limit'       => -1,
-        'orderby'     => 'date',
-        'order'       => 'DESC',
-        'status'      => $all_statuses,
-    ];
-    if ($member_filter_status && 'wc-' . ltrim($member_filter_status, 'wc-') !== 'wc-') {
-        $member_query['status'] = ['wc-' . ltrim($member_filter_status, 'wc-')];
-    } elseif ($member_filter_status) {
-        $member_query['status'] = [$member_filter_status];
-    }
-    $member_orders = wc_get_orders($member_query);
-
-    // Liste membres pour le filtre
     foreach ($other_ids as $mid) {
         $mu = get_userdata($mid);
-        if ($mu) $company_members[$mid] = $mu->display_name;
+        if ($mu) { $company_members[$mid] = $mu->display_name; }
     }
 }
 
-// Onglet actif (paramètre GET, défaut : mes-commandes)
-$active_tab = (isset($_GET['orders_tab']) && 'membres' === $_GET['orders_tab'] && $can_see_members) ? 'membres' : 'mes-commandes';
-$tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', 'order_search', 'date_from', 'date_to']);
+// Compteurs d'onglets : COUNT optimisé via pagination (aucune hydratation d'objet).
+$pe_count_orders = static function ($customer, array $status): int {
+    $res = wc_get_orders([
+        'customer_id' => $customer,
+        'status'      => $status,
+        'limit'       => 1,
+        'paginate'    => true,
+        'return'      => 'ids',
+    ]);
+    return (int) $res->total;
+};
+$my_count     = $pe_count_orders($user_id, $all_statuses);
+$member_count = $can_see_members ? $pe_count_orders($other_ids, $all_statuses) : 0;
+
+// Hydratation des commandes du SEUL onglet actif, avec filtre de date appliqué en base.
+$orders_query = [
+    'limit'   => -1,
+    'orderby' => 'date',
+    'order'   => 'DESC',
+];
+if ('' !== $date_created) {
+    $orders_query['date_created'] = $date_created;
+}
+
+if ('membres' === $active_tab) {
+    $query_ids = ($member_filter_user && in_array($member_filter_user, $other_ids, true)) ? [$member_filter_user] : $other_ids;
+    $orders_query['customer_id'] = $query_ids;
+    $orders_query['status']      = $member_filter_status ? [$member_filter_status] : $all_statuses;
+    $show_member_col = true;
+} else {
+    $orders_query['customer_id'] = $user_id;
+    $orders_query['status']      = $all_statuses;
+    $show_member_col = false;
+}
+$display_orders = wc_get_orders($orders_query);
+
+// Filtre numéro de commande (recherche partielle) sur l'onglet actif déjà restreint par date.
+if ('' !== $search_num) {
+    $display_orders = array_filter(
+        $display_orders,
+        static fn($o) => stripos((string) $o->get_order_number(), $search_num) !== false
+    );
+}
+
+$active_total = ('membres' === $active_tab) ? $member_count : $my_count;
 ?>
 
 <div class="pe-dashboard">
@@ -234,13 +264,13 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
                class="pe-tab <?php echo 'mes-commandes' === $active_tab ? 'pe-tab-active' : ''; ?>"
                style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
                 <?php esc_html_e('Mes commandes', 'portail-entreprises'); ?>
-                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo count($my_orders); ?></span>
+                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo (int) $my_count; ?></span>
             </a>
             <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url) . '#pe-commandes'); ?>"
                class="pe-tab <?php echo 'membres' === $active_tab ? 'pe-tab-active' : ''; ?>"
                style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'membres' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'membres' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
                 <?php esc_html_e('Commandes des membres', 'portail-entreprises'); ?>
-                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo count($member_orders); ?></span>
+                <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo (int) $member_count; ?></span>
             </a>
         </div>
         <?php endif; ?>
@@ -272,37 +302,12 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
             <?php endif; ?>
         </form>
 
-        <?php $display_orders = $member_orders; $show_member_col = true; ?>
-        <?php else : ?>
-        <?php $display_orders = $my_orders; $show_member_col = false; ?>
-        <?php endif; ?>
+        <?php endif; // filtres membres ?>
 
-        <?php if (empty($display_orders)) : ?>
+        <?php if (0 === $active_total && !$has_filters) : ?>
             <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></p>
         <?php else : ?>
         <?php
-        // Filtres de recherche (numéro de commande / plage de dates).
-        $order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
-        $date_from    = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
-        $date_to      = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
-
-        $from_ts    = $date_from ? strtotime($date_from . ' 00:00:00') : 0;
-        $to_ts      = $date_to ? strtotime($date_to . ' 23:59:59') : 0;
-        $search_num = ltrim($order_search, '#');
-
-        $filtered_orders = array_filter($display_orders, function ($o) use ($search_num, $from_ts, $to_ts) {
-            if ('' !== $search_num && stripos((string) $o->get_order_number(), $search_num) === false) {
-                return false;
-            }
-            $d  = $o->get_date_created();
-            $ts = $d ? $d->getTimestamp() : 0;
-            if ($from_ts && $ts < $from_ts) { return false; }
-            if ($to_ts && $ts > $to_ts) { return false; }
-            return true;
-        });
-
-        $has_filters = ('' !== $order_search) || ('' !== $date_from) || ('' !== $date_to);
-
         // Base d'URL conservant l'onglet courant et les filtres membres (pour « Réinitialiser »).
         $base_args = ['orders_tab' => $active_tab];
         if ('membres' === $active_tab) {
@@ -340,7 +345,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
             <?php endif; ?>
         </form>
 
-        <?php if (empty($filtered_orders)) : ?>
+        <?php if (empty($display_orders)) : ?>
             <p style="padding:20px 0;color:#6b7280;"><?php esc_html_e('Aucune commande ne correspond à votre recherche.', 'portail-entreprises'); ?></p>
         <?php else : ?>
         <div class="pe-table-responsive">
@@ -358,7 +363,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status', '
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($filtered_orders as $order) : ?>
+                    <?php foreach ($display_orders as $order) : ?>
                     <tr>
                         <td>
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>">

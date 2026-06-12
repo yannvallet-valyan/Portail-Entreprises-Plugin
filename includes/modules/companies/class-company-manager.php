@@ -434,6 +434,20 @@ class PE_Company_Manager {
     }
 
     /**
+     * Compte les membres d'une entreprise (requête COUNT, sans hydratation).
+     */
+    public function count_company_users(int $company_id): int {
+        global $wpdb;
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->prefix}b2b_user_company WHERE company_id = %d",
+                $company_id
+            )
+        );
+    }
+
+    /**
      * Ajoute un utilisateur à une entreprise.
      */
     public function add_user_to_company(int $user_id, int $company_id, string $role, array $opts = []): bool {
