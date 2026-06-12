@@ -644,24 +644,11 @@ class PE_Approval_Manager {
             }
         }
 
-        // Administrateurs WP et gestionnaires de boutique — notification via email WooCommerce.
-        $this->send_new_order_admin_email($order_id);
-    }
-
-    /**
-     * Envoie l'email WooCommerce "Nouvelle commande" aux admins/shop_managers.
-     */
-    private function send_new_order_admin_email(int $order_id): void {
-        $order = wc_get_order($order_id);
-        if (!$order) {
-            return;
-        }
-
-        // Utilise le système d'email WooCommerce natif.
-        $wc_emails = WC()->mailer()->get_emails();
-        if (isset($wc_emails['WC_Email_New_Order'])) {
-            $wc_emails['WC_Email_New_Order']->trigger($order_id, $order);
-        }
+        // Note : les administrateurs WP / gestionnaires de boutique ne sont PAS
+        // notifiés à ce stade. La commande est encore en attente de validation
+        // (statut « pending-approval »). L'email WooCommerce « Nouvelle commande »
+        // leur est envoyé uniquement lorsque la commande est approuvée et passe
+        // « en cours » (voir approve_request()).
     }
 
     /**
