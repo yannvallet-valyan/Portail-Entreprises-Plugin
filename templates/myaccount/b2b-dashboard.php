@@ -230,13 +230,13 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
         <?php if ($can_see_members) : ?>
         <!-- Onglets -->
         <div class="pe-tabs" style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e5e7eb;">
-            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'mes-commandes', $tab_base_url)); ?>"
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'mes-commandes', $tab_base_url) . '#pe-commandes'); ?>"
                class="pe-tab <?php echo 'mes-commandes' === $active_tab ? 'pe-tab-active' : ''; ?>"
                style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'mes-commandes' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
                 <?php esc_html_e('Mes commandes', 'portail-entreprises'); ?>
                 <span style="background:#e5e7eb;border-radius:999px;padding:1px 8px;font-size:0.75em;margin-left:6px;"><?php echo count($my_orders); ?></span>
             </a>
-            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url)); ?>"
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url) . '#pe-commandes'); ?>"
                class="pe-tab <?php echo 'membres' === $active_tab ? 'pe-tab-active' : ''; ?>"
                style="padding:10px 20px;font-weight:600;text-decoration:none;border-bottom:2px solid <?php echo 'membres' === $active_tab ? '#1e3a5f' : 'transparent'; ?>;margin-bottom:-2px;color:<?php echo 'membres' === $active_tab ? '#1e3a5f' : '#6b7280'; ?>;">
                 <?php esc_html_e('Commandes des membres', 'portail-entreprises'); ?>
@@ -247,7 +247,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
 
         <?php if ('membres' === $active_tab && $can_see_members) : ?>
         <!-- Filtres membres -->
-        <form method="get" action="" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:14px 0 12px;">
+        <form method="get" action="#pe-commandes" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:14px 0 12px;">
             <input type="hidden" name="orders_tab" value="membres" />
             <select name="member_uid" class="pe-input" style="width:auto;min-width:160px;" onchange="this.form.submit()">
                 <option value="0"><?php esc_html_e('Tous les membres', 'portail-entreprises'); ?></option>
@@ -266,7 +266,7 @@ $tab_base_url = remove_query_arg(['orders_tab', 'member_uid', 'member_status']);
                 <?php endforeach; ?>
             </select>
             <?php if ($member_filter_user || $member_filter_status) : ?>
-            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url)); ?>" style="font-size:0.85em;color:#6b7280;">
+            <a href="<?php echo esc_url(add_query_arg('orders_tab', 'membres', $tab_base_url) . '#pe-commandes'); ?>" style="font-size:0.85em;color:#6b7280;">
                 <?php esc_html_e('Réinitialiser', 'portail-entreprises'); ?>
             </a>
             <?php endif; ?>
