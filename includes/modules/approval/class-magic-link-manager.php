@@ -237,12 +237,21 @@ class PE_Magic_Link_Manager {
         $validation = $this->validate_token($raw_token, $request_id);
 
         if (is_wp_error($validation)) {
-            $this->render_message(
-                __('Lien invalide ou expiré.', 'portail-entreprises'),
-                $validation->get_error_message(),
-                'error',
-                true
-            );
+            $code = $validation->get_error_code();
+
+            // Demande déjà traitée : message dédié (aucune action nécessaire).
+            if (in_array($code, ['used', 'already_processed'], true)) {
+                $this->render_message(
+                    __('Demande déjà traitée', 'portail-entreprises'),
+                    __('Cette demande a déjà été approuvée ou refusée. Aucune action supplémentaire n\'est nécessaire.', 'portail-entreprises'),
+                    'info',
+                    true
+                );
+                return;
+            }
+
+            // Lien expiré / révoqué / invalide : la demande reste traitable depuis l'espace personnel.
+            $this->render_link_expired_message();
             return;
         }
 
@@ -662,6 +671,27 @@ class PE_Magic_Link_Manager {
     }
 
     /**
+     * Affiche le message « lien expiré / invalide » avec un bouton vers l'espace
+     * d'approbation (la demande reste traitable côté compte).
+     */
+    private function render_link_expired_message(): void {
+        $approvals_url = wc_get_account_endpoint_url('b2b-approvals');
+
+        $content = '<div class="pe-ml-card pe-ml-message pe-ml-error">'
+            . '<div class="pe-ml-icon">✕</div>'
+            . '<h1>' . esc_html__('Ce lien n\'est plus valide', 'portail-entreprises') . '</h1>'
+            . '<p>' . esc_html__('Pour des raisons de sécurité, les liens d\'approbation envoyés par email expirent après un certain délai.', 'portail-entreprises') . '</p>'
+            . '<p>' . esc_html__('La demande n\'est pas perdue et peut toujours être approuvée ou refusée depuis votre espace personnel.', 'portail-entreprises') . '</p>'
+            . '<a href="' . esc_url($approvals_url) . '" class="pe-ml-btn-cta">'
+            . esc_html__('Accéder à mes approbations', 'portail-entreprises') . '</a>'
+            . '<a href="' . esc_url(home_url('/')) . '" class="pe-ml-home">'
+            . esc_html__('Retour à l\'accueil', 'portail-entreprises') . '</a>'
+            . '</div>';
+
+        $this->render_layout(__('Lien expiré', 'portail-entreprises'), $content);
+    }
+
+    /**
      * Affiche un message simple (succès / erreur / info).
      */
     private function render_message(string $title, string $detail, string $type = 'info', bool $show_approvals_link = false): void {
@@ -773,7 +803,9 @@ class PE_Magic_Link_Manager {
         .pe-ml-success .pe-ml-icon { background:#28a745; }
         .pe-ml-error .pe-ml-icon { background:#dc3545; }
         .pe-ml-info .pe-ml-icon { background:#2d6ebd; }
-        .pe-ml-home { display:inline-block; margin-top:20px; color:#2d6ebd; text-decoration:none; font-weight:600; }
+        .pe-ml-btn-cta { display:inline-block; margin-top:24px; padding:14px 28px; background:#2d6ebd; color:#fff; text-decoration:none; border-radius:8px; font-weight:600; font-size:15px; }
+        .pe-ml-btn-cta:hover { background:#2560a8; }
+        .pe-ml-home { display:block; margin-top:16px; color:#2d6ebd; text-decoration:none; font-weight:600; }
     </style>
         <?php
     }
