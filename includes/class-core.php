@@ -241,7 +241,8 @@ class PE_Core {
             return;
         }
 
-        wp_safe_redirect(wc_get_account_endpoint_url('b2b-dashboard'));
+        // Atterrit directement sur la section « Commandes » du tableau de bord.
+        wp_safe_redirect(wc_get_account_endpoint_url('b2b-dashboard') . '#pe-commandes');
         exit;
     }
 
