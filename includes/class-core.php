@@ -294,10 +294,9 @@ class PE_Core {
             return;
         }
 
-        $on_b2b_page = is_account_page() || is_cart() || is_checkout();
-        if (!$on_b2b_page) {
-            return;
-        }
+        // Pas de restriction de page : le mini-panier / panier flottant WoodMart
+        // (et son blocage checkout) apparaît sur toutes les pages front, il faut
+        // donc charger le CSS/JS partout pour les utilisateurs B2B.
 
         wp_enqueue_style(
             'pe-b2b-portal',
