@@ -308,22 +308,33 @@
                 return;
             }
 
-            var cartUrl = (peB2B.cartUrl || '').replace(/\/+$/, '');
-            if (!cartUrl) {
+            var $content = $('.widget_shopping_cart_content');
+            if (!$content.length) {
                 return;
             }
 
-            $('.widget_shopping_cart_content').find('a').each(function () {
-                var href = (this.getAttribute('href') || '').replace(/\/+$/, '');
-                if (href !== cartUrl) {
-                    return;
-                }
-                // On garde le bouton du plugin, on masque les doublons (WoodMart).
-                if ($(this).closest('.pe-checkout-blocked-mini').length) {
-                    return;
-                }
-                $(this).addClass('pe-dup-view-cart').hide();
-            });
+            // 1) Ciblage robuste : le bouton « Voir le panier » de WoodMart est un
+            //    a.btn-cart enfant direct du footer du panier flottant.
+            $content.find('.shopping-cart-widget-footer > a.btn-cart')
+                .addClass('pe-dup-view-cart');
+
+            // 2) Repli générique : tout autre lien pointant vers l'URL du panier
+            //    qui n'est pas notre bouton (dans .pe-checkout-blocked-mini).
+            var cartUrl = (peB2B.cartUrl || '').replace(/\/+$/, '');
+            if (cartUrl) {
+                $content.find('a').each(function () {
+                    var href = (this.getAttribute('href') || '').replace(/\/+$/, '');
+                    // On ne touche pas aux liens qui ajoutent des paramètres
+                    // (ex. « Transformer en devis » : ?create-quote=…).
+                    if (href !== cartUrl) {
+                        return;
+                    }
+                    if ($(this).closest('.pe-checkout-blocked-mini').length) {
+                        return;
+                    }
+                    $(this).addClass('pe-dup-view-cart');
+                });
+            }
         },
 
         /**

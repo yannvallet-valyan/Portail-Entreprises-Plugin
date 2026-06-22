@@ -811,9 +811,31 @@
     font-weight: 600 !important;
 }
 
-/* Doublon « Voir le panier » WoodMart masqué dans le mini-panier */
-.widget_shopping_cart_content a.pe-dup-view-cart {
+/* Doublon « Voir le panier » WoodMart masqué dans le mini-panier.
+   WoodMart rend son propre bouton (a.btn-cart) en enfant direct du footer du
+   panier flottant, hors du hook woocommerce_widget_shopping_cart_buttons : on
+   le masque pour ne garder que celui injecté par le plugin (dans
+   .pe-checkout-blocked-mini). « Transformer en devis »
+   (a.wcq-create-quote-button-min) et notre bouton ne sont pas touchés. */
+.widget_shopping_cart_content a.pe-dup-view-cart,
+.shopping-cart-widget-footer > a.btn-cart {
     display: none !important;
+}
+
+/* Le paragraphe de boutons natif est vidé (boutons retirés côté serveur) :
+   on le masque pour éviter un espace vertical inutile. */
+.shopping-cart-widget-footer > p.woocommerce-mini-cart__buttons.buttons:empty {
+    display: none !important;
+}
+
+/* Aligner les boutons restants rendus en enfants directs du footer
+   (ex. « Transformer en devis ») sur la largeur de nos boutons. */
+.shopping-cart-widget-footer > a.button {
+    display: block;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+    margin: 8px 0 0;
 }
 
 /* Approbation dans mini-panier */
