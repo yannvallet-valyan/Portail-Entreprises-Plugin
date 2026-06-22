@@ -261,8 +261,11 @@
                 }
 
                 // ── Mini-panier / panier flottant ──
-                // Géré côté serveur (woocommerce_widget_shopping_cart_buttons).
-                // Ne rien injecter ici pour éviter les doublons.
+                // Le bouton « Voir le panier » du plugin est injecté côté serveur
+                // (woocommerce_widget_shopping_cart_buttons). WoodMart rend toutefois
+                // son propre bouton « Voir le panier » dans le panier flottant, que le
+                // remove_action serveur ne supprime pas → on retire ce doublon ici.
+                self.dedupeMiniCartViewCart();
 
                 // ── Page PANIER uniquement ──
                 // Le bouton "Procéder au paiement" de la page panier n'est pas couvert
@@ -282,6 +285,56 @@
                     doBlock();
                 }
             );
+
+            // Le mini-panier flottant est régénéré via les fragments WC/WoodMart :
+            // on rejoue la déduplication à chaque rafraîchissement.
+            $(document.body).on(
+                'wc_fragments_refreshed wc_fragments_loaded added_to_cart removed_from_cart',
+                function () {
+                    self.dedupeMiniCartViewCart();
+                }
+            );
+        },
+
+        /**
+         * Supprime le bouton « Voir le panier » en double dans le mini-panier
+         * flottant WoodMart. On conserve celui rendu par le plugin (à l'intérieur
+         * de .pe-checkout-blocked-mini) et on masque tout autre lien pointant vers
+         * l'URL du panier. Les autres boutons (ex. « Transformer en devis »), dont
+         * l'URL diffère, ne sont pas touchés.
+         */
+        dedupeMiniCartViewCart: function () {
+            if (!peB2B.checkoutBlocked) {
+                return;
+            }
+
+            var $content = $('.widget_shopping_cart_content');
+            if (!$content.length) {
+                return;
+            }
+
+            // 1) Ciblage robuste : le bouton « Voir le panier » de WoodMart est un
+            //    a.btn-cart enfant direct du footer du panier flottant.
+            $content.find('.shopping-cart-widget-footer > a.btn-cart')
+                .addClass('pe-dup-view-cart');
+
+            // 2) Repli générique : tout autre lien pointant vers l'URL du panier
+            //    qui n'est pas notre bouton (dans .pe-checkout-blocked-mini).
+            var cartUrl = (peB2B.cartUrl || '').replace(/\/+$/, '');
+            if (cartUrl) {
+                $content.find('a').each(function () {
+                    var href = (this.getAttribute('href') || '').replace(/\/+$/, '');
+                    // On ne touche pas aux liens qui ajoutent des paramètres
+                    // (ex. « Transformer en devis » : ?create-quote=…).
+                    if (href !== cartUrl) {
+                        return;
+                    }
+                    if ($(this).closest('.pe-checkout-blocked-mini').length) {
+                        return;
+                    }
+                    $(this).addClass('pe-dup-view-cart');
+                });
+            }
         },
 
         /**
