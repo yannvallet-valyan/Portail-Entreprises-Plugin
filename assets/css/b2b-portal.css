@@ -811,6 +811,11 @@
     font-weight: 600 !important;
 }
 
+/* Doublon « Voir le panier » WoodMart masqué dans le mini-panier */
+.widget_shopping_cart_content a.pe-dup-view-cart {
+    display: none !important;
+}
+
 /* Approbation dans mini-panier */
 .woocommerce-mini-cart__buttons .pe-approval-request-form,
 .widget_shopping_cart_content .pe-approval-request-form {

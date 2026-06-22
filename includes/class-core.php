@@ -343,6 +343,7 @@ class PE_Core {
             'checkoutBlockMsg'   => $checkout_block_reason,
             'approvalButtonHtml' => $approval_button_html,
             'isCheckout'         => is_checkout(),
+            'cartUrl'            => wc_get_cart_url(),
             'pendingApprovals'   => $pending_approvals,
             'i18n'               => [
                 'confirmApprove'           => __('Confirmer l\'approbation de cette demande ?', 'portail-entreprises'),

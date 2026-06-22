@@ -261,8 +261,11 @@
                 }
 
                 // ── Mini-panier / panier flottant ──
-                // Géré côté serveur (woocommerce_widget_shopping_cart_buttons).
-                // Ne rien injecter ici pour éviter les doublons.
+                // Le bouton « Voir le panier » du plugin est injecté côté serveur
+                // (woocommerce_widget_shopping_cart_buttons). WoodMart rend toutefois
+                // son propre bouton « Voir le panier » dans le panier flottant, que le
+                // remove_action serveur ne supprime pas → on retire ce doublon ici.
+                self.dedupeMiniCartViewCart();
 
                 // ── Page PANIER uniquement ──
                 // Le bouton "Procéder au paiement" de la page panier n'est pas couvert
@@ -282,6 +285,45 @@
                     doBlock();
                 }
             );
+
+            // Le mini-panier flottant est régénéré via les fragments WC/WoodMart :
+            // on rejoue la déduplication à chaque rafraîchissement.
+            $(document.body).on(
+                'wc_fragments_refreshed wc_fragments_loaded added_to_cart removed_from_cart',
+                function () {
+                    self.dedupeMiniCartViewCart();
+                }
+            );
+        },
+
+        /**
+         * Supprime le bouton « Voir le panier » en double dans le mini-panier
+         * flottant WoodMart. On conserve celui rendu par le plugin (à l'intérieur
+         * de .pe-checkout-blocked-mini) et on masque tout autre lien pointant vers
+         * l'URL du panier. Les autres boutons (ex. « Transformer en devis »), dont
+         * l'URL diffère, ne sont pas touchés.
+         */
+        dedupeMiniCartViewCart: function () {
+            if (!peB2B.checkoutBlocked) {
+                return;
+            }
+
+            var cartUrl = (peB2B.cartUrl || '').replace(/\/+$/, '');
+            if (!cartUrl) {
+                return;
+            }
+
+            $('.widget_shopping_cart_content').find('a').each(function () {
+                var href = (this.getAttribute('href') || '').replace(/\/+$/, '');
+                if (href !== cartUrl) {
+                    return;
+                }
+                // On garde le bouton du plugin, on masque les doublons (WoodMart).
+                if ($(this).closest('.pe-checkout-blocked-mini').length) {
+                    return;
+                }
+                $(this).addClass('pe-dup-view-cart').hide();
+            });
         },
 
         /**
