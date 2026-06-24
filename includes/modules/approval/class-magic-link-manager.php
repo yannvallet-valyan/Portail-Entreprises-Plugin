@@ -152,7 +152,7 @@ class PE_Magic_Link_Manager {
             . '<tr>'
             . '<td>'
             . '<a href="' . esc_url($links['view']) . '" '
-            . 'style="display:inline-block;background:#2d6ebd;color:#ffffff;text-decoration:none;'
+            . 'style="display:inline-block;background:#c00000;color:#ffffff;text-decoration:none;'
             . 'padding:14px 28px;border-radius:6px;font-weight:600;font-family:sans-serif;font-size:15px;">'
             . esc_html__('Voir la demande d\'approbation', 'portail-entreprises') . '</a>'
             . '</td>'

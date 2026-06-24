@@ -79,6 +79,15 @@ class PE_Core {
         add_filter('woocommerce_checkout_get_value', [$this, 'prefill_checkout_billing_from_company'], 10, 2);
         add_action('woocommerce_checkout_update_customer', [$this, 'restore_company_billing_after_checkout'], 10, 2);
 
+        // E-mails sortants : expéditeur du portail via le système natif WordPress.
+        // - wp_mail_from / wp_mail_from_name : définit l'adresse et le nom d'expéditeur
+        //   (uniquement si une adresse est configurée ; sinon comportement natif WP).
+        // - phpmailer_init : aligne le Return-Path (enveloppe SMTP) sur l'adresse From,
+        //   ce qui évite la mention « via <serveur d'hébergement> » dans Gmail.
+        add_filter('wp_mail_from', [$this, 'filter_mail_from']);
+        add_filter('wp_mail_from_name', [$this, 'filter_mail_from_name']);
+        add_action('phpmailer_init', [$this, 'align_mail_return_path']);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -92,6 +101,62 @@ class PE_Core {
         if (is_admin()) {
             require_once PE_PATH . 'includes/admin/class-admin.php';
             PE_Admin::get_instance();
+        }
+    }
+
+    /**
+     * Adresse e-mail d'expéditeur configurée dans les paramètres du portail.
+     * Chaîne vide si aucune adresse valide n'est définie.
+     */
+    private function get_configured_from_email(): string {
+        $settings   = get_option('pe_settings', []);
+        $from_email = isset($settings['from_email']) ? trim((string) $settings['from_email']) : '';
+
+        return is_email($from_email) ? $from_email : '';
+    }
+
+    /**
+     * Filtre wp_mail_from : remplace l'adresse d'expéditeur par celle configurée.
+     * Si aucune adresse n'est définie, conserve la valeur native de WordPress
+     * (par défaut wordpress@<domaine-du-site>).
+     *
+     * @param string $from Adresse d'expéditeur native fournie par WordPress.
+     */
+    public function filter_mail_from(string $from): string {
+        $configured = $this->get_configured_from_email();
+        return '' !== $configured ? $configured : $from;
+    }
+
+    /**
+     * Filtre wp_mail_from_name : utilise le nom du site comme nom d'expéditeur
+     * lorsqu'une adresse d'envoi du portail est configurée. Sinon, conserve la
+     * valeur native de WordPress.
+     *
+     * @param string $name Nom d'expéditeur natif fourni par WordPress.
+     */
+    public function filter_mail_from_name(string $name): string {
+        if ('' === $this->get_configured_from_email()) {
+            return $name;
+        }
+
+        $blogname = wp_specialchars_decode((string) get_option('blogname'), ENT_QUOTES);
+        return '' !== $blogname ? $blogname : $name;
+    }
+
+    /**
+     * Aligne le Return-Path (expéditeur d'enveloppe SMTP) sur l'adresse From.
+     *
+     * Sans cet alignement, l'hébergeur (ex. OVH) force un Return-Path sur son
+     * propre domaine de cluster, ce qui pousse Gmail à afficher « via
+     * <serveur> ». En faisant correspondre l'enveloppe à l'adresse From, la
+     * mention disparaît dès lors que le SPF du domaine autorise le serveur
+     * d'envoi (cas normal lorsque le site et l'adresse sont sur le même domaine).
+     *
+     * @param \PHPMailer\PHPMailer\PHPMailer $phpmailer Instance PHPMailer de WordPress.
+     */
+    public function align_mail_return_path($phpmailer): void {
+        if (is_object($phpmailer) && !empty($phpmailer->From)) {
+            $phpmailer->Sender = $phpmailer->From;
         }
     }
 

@@ -230,9 +230,12 @@ class PE_Admin {
                 $ml_validity = '7d';
             }
 
+            $from_email = sanitize_email($_POST['from_email'] ?? '');
+
             $settings = [
                 'require_approval_all'             => isset($_POST['require_approval_all']) ? 1 : 0,
                 'default_payment_terms'            => (int) ($_POST['default_payment_terms'] ?? 30),
+                'from_email'                       => is_email($from_email) ? $from_email : '',
                 'magic_link_enabled'               => isset($_POST['magic_link_enabled']) ? 1 : 0,
                 'magic_link_validity'              => $ml_validity,
                 'magic_link_validity_custom_hours' => max(1, (int) ($_POST['magic_link_validity_custom_hours'] ?? 168)),
@@ -268,6 +271,36 @@ class PE_Admin {
                                        value="1" <?php checked($settings['require_approval_all'] ?? 0, 1); ?> />
                                 <?php esc_html_e('Toutes les commandes B2B nécessitent une approbation', 'portail-entreprises'); ?>
                             </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Adresse e-mail d\'envoi', 'portail-entreprises'); ?></th>
+                        <td>
+                            <?php
+                            // Adresse d'expéditeur native de WordPress (wordpress@<domaine du site>),
+                            // utilisée par défaut lorsque le champ est laissé vide.
+                            $site_host = wp_parse_url(network_home_url(), PHP_URL_HOST);
+                            if (is_string($site_host) && 'www.' === substr($site_host, 0, 4)) {
+                                $site_host = substr($site_host, 4);
+                            }
+                            $default_from = 'wordpress@' . (string) $site_host;
+                            ?>
+                            <input type="email" name="from_email"
+                                   value="<?php echo esc_attr($settings['from_email'] ?? ''); ?>"
+                                   placeholder="<?php echo esc_attr($default_from); ?>"
+                                   class="regular-text" />
+                            <p class="description">
+                                <?php
+                                printf(
+                                    /* translators: %s: default sender email address on the site domain */
+                                    esc_html__('Adresse utilisée comme expéditeur des e-mails du portail. Le nom d\'expéditeur affiché est celui du site. Laissez vide pour utiliser l\'adresse native de WordPress (%s).', 'portail-entreprises'),
+                                    esc_html($default_from)
+                                );
+                                ?>
+                            </p>
+                            <p class="description" style="color:#b32d2e;">
+                                <?php esc_html_e('Important : utilisez une adresse sur le domaine de votre site (ex. contact@accud-france.fr). Une adresse externe (Gmail, Outlook…) déclenche la mention « via … » dans la messagerie des destinataires et nuit à la délivrabilité, car votre serveur n\'est pas autorisé à envoyer au nom de ce domaine.', 'portail-entreprises'); ?>
+                            </p>
                         </td>
                     </tr>
                     <tr>
