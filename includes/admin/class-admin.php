@@ -230,9 +230,12 @@ class PE_Admin {
                 $ml_validity = '7d';
             }
 
+            $from_email = sanitize_email($_POST['from_email'] ?? '');
+
             $settings = [
                 'require_approval_all'             => isset($_POST['require_approval_all']) ? 1 : 0,
                 'default_payment_terms'            => (int) ($_POST['default_payment_terms'] ?? 30),
+                'from_email'                       => is_email($from_email) ? $from_email : '',
                 'magic_link_enabled'               => isset($_POST['magic_link_enabled']) ? 1 : 0,
                 'magic_link_validity'              => $ml_validity,
                 'magic_link_validity_custom_hours' => max(1, (int) ($_POST['magic_link_validity_custom_hours'] ?? 168)),
@@ -268,6 +271,24 @@ class PE_Admin {
                                        value="1" <?php checked($settings['require_approval_all'] ?? 0, 1); ?> />
                                 <?php esc_html_e('Toutes les commandes B2B nécessitent une approbation', 'portail-entreprises'); ?>
                             </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Adresse e-mail d\'envoi', 'portail-entreprises'); ?></th>
+                        <td>
+                            <input type="email" name="from_email"
+                                   value="<?php echo esc_attr($settings['from_email'] ?? ''); ?>"
+                                   placeholder="<?php echo esc_attr(get_option('admin_email')); ?>"
+                                   class="regular-text" />
+                            <p class="description">
+                                <?php
+                                printf(
+                                    /* translators: %s: admin email address */
+                                    esc_html__('Adresse utilisée comme expéditeur des e-mails du portail (demandes d\'approbation, notifications). Laissez vide pour utiliser l\'adresse administrateur de WordPress (%s).', 'portail-entreprises'),
+                                    esc_html(get_option('admin_email'))
+                                );
+                                ?>
+                            </p>
                         </td>
                     </tr>
                     <tr>

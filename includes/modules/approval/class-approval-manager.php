@@ -599,6 +599,7 @@ class PE_Approval_Manager {
         ) ?: [];
 
         $use_magic_links = class_exists('PE_Magic_Link_Manager') && PE_Magic_Link_Manager::get_instance()->is_enabled();
+        $from_header     = $this->get_from_header();
 
         foreach ($approvers as $approver) {
             $approver_user = get_user_by('email', $approver->user_email);
@@ -611,6 +612,9 @@ class PE_Approval_Manager {
 
             if ($magic_buttons) {
                 $headers = ['Content-Type: text/html; charset=UTF-8'];
+                if ('' !== $from_header) {
+                    $headers[] = $from_header;
+                }
                 $body    = '<html><body style="font-family:sans-serif;color:#1a2744;">'
                     . '<p>' . sprintf(esc_html__('Bonjour %s,', 'portail-entreprises'), esc_html($approver->display_name)) . '</p>'
                     . '<p>' . esc_html__('Une nouvelle commande nécessite votre validation.', 'portail-entreprises') . '</p>'
@@ -639,7 +643,8 @@ class PE_Approval_Manager {
                         html_entity_decode(strip_tags(wc_price($amount))),
                         $order_id,
                         esc_url($approval_url)
-                    )
+                    ),
+                    '' !== $from_header ? [$from_header] : []
                 );
             }
         }
@@ -649,6 +654,29 @@ class PE_Approval_Manager {
         // (statut « pending-approval »). L'email WooCommerce « Nouvelle commande »
         // leur est envoyé uniquement lorsque la commande est approuvée et passe
         // « en cours » (voir approve_request()).
+    }
+
+    /**
+     * Construit l'en-tête « From » des e-mails du portail.
+     *
+     * Utilise l'adresse d'envoi configurée dans les paramètres, ou à défaut
+     * l'adresse administrateur de WordPress.
+     */
+    private function get_from_header(): string {
+        $settings   = get_option('pe_settings', []);
+        $from_email = isset($settings['from_email']) ? trim((string) $settings['from_email']) : '';
+
+        if (!is_email($from_email)) {
+            $from_email = get_option('admin_email');
+        }
+
+        if (!is_email($from_email)) {
+            return '';
+        }
+
+        $from_name = wp_specialchars_decode((string) get_option('blogname'), ENT_QUOTES);
+
+        return sprintf('From: %s <%s>', $from_name, $from_email);
     }
 
     /**
@@ -684,7 +712,8 @@ class PE_Approval_Manager {
             );
         }
 
-        wp_mail($user->user_email, $subject, $message);
+        $from_header = $this->get_from_header();
+        wp_mail($user->user_email, $subject, $message, '' !== $from_header ? [$from_header] : []);
     }
 
     /**
