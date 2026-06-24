@@ -102,15 +102,6 @@ class PE_User_Manager {
 
         // Envoi du mot de passe par e-mail si généré
         if (empty($data['password'])) {
-            $settings   = get_option('pe_settings', []);
-            $from_email = isset($settings['from_email']) ? trim((string) $settings['from_email']) : '';
-            if (!is_email($from_email)) {
-                $from_email = get_option('admin_email');
-            }
-            $headers = is_email($from_email)
-                ? [sprintf('From: %s <%s>', wp_specialchars_decode((string) get_option('blogname'), ENT_QUOTES), $from_email)]
-                : [];
-
             wp_mail(
                 $data['email'],
                 __('Votre accès au portail B2B', 'portail-entreprises'),
@@ -120,8 +111,7 @@ class PE_User_Manager {
                     $data['email'],
                     $password,
                     wc_get_page_permalink('myaccount')
-                ),
-                $headers
+                )
             );
         }
 

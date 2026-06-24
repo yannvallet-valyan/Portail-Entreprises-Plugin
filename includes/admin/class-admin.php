@@ -276,18 +276,30 @@ class PE_Admin {
                     <tr>
                         <th scope="row"><?php esc_html_e('Adresse e-mail d\'envoi', 'portail-entreprises'); ?></th>
                         <td>
+                            <?php
+                            // Adresse d'expéditeur native de WordPress (wordpress@<domaine du site>),
+                            // utilisée par défaut lorsque le champ est laissé vide.
+                            $site_host = wp_parse_url(network_home_url(), PHP_URL_HOST);
+                            if (is_string($site_host) && 'www.' === substr($site_host, 0, 4)) {
+                                $site_host = substr($site_host, 4);
+                            }
+                            $default_from = 'wordpress@' . (string) $site_host;
+                            ?>
                             <input type="email" name="from_email"
                                    value="<?php echo esc_attr($settings['from_email'] ?? ''); ?>"
-                                   placeholder="<?php echo esc_attr(get_option('admin_email')); ?>"
+                                   placeholder="<?php echo esc_attr($default_from); ?>"
                                    class="regular-text" />
                             <p class="description">
                                 <?php
                                 printf(
-                                    /* translators: %s: admin email address */
-                                    esc_html__('Adresse utilisée comme expéditeur des e-mails du portail (demandes d\'approbation, notifications). Laissez vide pour utiliser l\'adresse administrateur de WordPress (%s).', 'portail-entreprises'),
-                                    esc_html(get_option('admin_email'))
+                                    /* translators: %s: default sender email address on the site domain */
+                                    esc_html__('Adresse utilisée comme expéditeur des e-mails du portail. Le nom d\'expéditeur affiché est celui du site. Laissez vide pour utiliser l\'adresse native de WordPress (%s).', 'portail-entreprises'),
+                                    esc_html($default_from)
                                 );
                                 ?>
+                            </p>
+                            <p class="description" style="color:#b32d2e;">
+                                <?php esc_html_e('Important : utilisez une adresse sur le domaine de votre site (ex. contact@accud-france.fr). Une adresse externe (Gmail, Outlook…) déclenche la mention « via … » dans la messagerie des destinataires et nuit à la délivrabilité, car votre serveur n\'est pas autorisé à envoyer au nom de ce domaine.', 'portail-entreprises'); ?>
                             </p>
                         </td>
                     </tr>
