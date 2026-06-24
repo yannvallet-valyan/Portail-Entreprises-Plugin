@@ -619,7 +619,7 @@ class PE_Approval_Manager {
                     . '<p><strong>' . esc_html__('Commande n° :', 'portail-entreprises') . '</strong> ' . (int) $order_id . '</p>'
                     . $magic_buttons
                     . '<p style="font-size:13px;color:#666;">' . esc_html__('Vous pouvez aussi accéder à votre espace approbations :', 'portail-entreprises') . ' <a href="' . esc_url($approval_url) . '">' . esc_url($approval_url) . '</a></p>'
-                    . '<p>' . esc_html__('Cordialement,', 'portail-entreprises') . '<br>' . esc_html__('Le portail B2B', 'portail-entreprises') . '</p>'
+                    . '<p>' . esc_html__('Cordialement,', 'portail-entreprises') . '<br>' . esc_html__('MY METROLOGY - By B MESURE', 'portail-entreprises') . '</p>'
                     . '</body></html>';
 
                 wp_mail(
@@ -633,7 +633,7 @@ class PE_Approval_Manager {
                     $approver->user_email,
                     sprintf(__('[B2B] Nouvelle demande d\'approbation — Commande n° %d', 'portail-entreprises'), $order_id),
                     sprintf(
-                        __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\n%2\$sMontant : %3\$s\nCommande n° : %4\$d\n\nApprouver ou rejeter :\n%5\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                        __("Bonjour %1\$s,\n\nUne nouvelle commande nécessite votre validation.\n\n%2\$sMontant : %3\$s\nCommande n° : %4\$d\n\nApprouver ou rejeter :\n%5\$s\n\nCordialement,\nMY METROLOGY - By B MESURE", 'portail-entreprises'),
                         esc_html($approver->display_name),
                         '' !== $requester_label ? $requester_label . "\n" : '',
                         html_entity_decode(strip_tags(wc_price($amount))),
@@ -669,7 +669,7 @@ class PE_Approval_Manager {
             $subject = __('Votre commande a été approuvée', 'portail-entreprises');
             $message = sprintf(
                 /* translators: 1: name, 2: order ID */
-                __("Bonjour %1\$s,\n\nVotre commande n° %2\$d a été approuvée et est en cours de traitement.\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                __("Bonjour %1\$s,\n\nVotre commande n° %2\$d a été approuvée et est en cours de traitement.\n\nCordialement,\nMY METROLOGY - By B MESURE", 'portail-entreprises'),
                 esc_html($user->display_name),
                 (int) $request->order_id
             );
@@ -677,7 +677,7 @@ class PE_Approval_Manager {
             $subject = __('Votre commande a été refusée', 'portail-entreprises');
             $message = sprintf(
                 /* translators: 1: name, 2: order ID, 3: reason */
-                __("Bonjour %1\$s,\n\nVotre commande n° %2\$d a été refusée.\n\nMotif : %3\$s\n\nCordialement,\nLe portail B2B", 'portail-entreprises'),
+                __("Bonjour %1\$s,\n\nVotre commande n° %2\$d a été refusée.\n\nMotif : %3\$s\n\nCordialement,\nMY METROLOGY - By B MESURE", 'portail-entreprises'),
                 esc_html($user->display_name),
                 (int) $request->order_id,
                 esc_html($reason)
