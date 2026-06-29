@@ -359,9 +359,39 @@ class PE_Core {
             return;
         }
 
-        // Pas de restriction de page : le mini-panier / panier flottant WoodMart
-        // (et son blocage checkout) apparaît sur toutes les pages front, il faut
-        // donc charger le CSS/JS partout pour les utilisateurs B2B.
+        // État de blocage du checkout — calculé en amont car il sert à la fois à
+        // décider du chargement des assets ET à alimenter les données du JS.
+        // Évalué sur toutes les pages afin que le mini-panier reflète le blocage.
+        $checkout_blocked      = false;
+        $checkout_block_reason = '';
+        $approval_button_html  = '';
+
+        if (class_exists('PE_Budget_Manager')) {
+            $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
+            if (true !== $reason) {
+                $checkout_blocked      = true;
+                $checkout_block_reason = $reason;
+                if (class_exists('PE_Approval_Manager')) {
+                    $approval_button_html = PE_Approval_Manager::get_instance()->get_approval_button_html('cart');
+                }
+            }
+        }
+
+        // ── Chargement sélectif ──
+        // Les fonctionnalités du portail (approbations, gestion société, badge,
+        // centre de coût…) ne concernent que les pages Mon compte / panier /
+        // checkout. Le seul cas qui impose un chargement « partout » est le
+        // mini-panier flottant WoodMart lorsque le checkout est bloqué : il faut
+        // alors pouvoir afficher le blocage sur n'importe quelle page.
+        //
+        // Conséquence : un utilisateur B2B non bloqué qui parcourt une page
+        // publique (catégorie, fiche produit, article…) ne charge plus rien.
+        $is_portal_page = function_exists('is_account_page') &&
+            (is_account_page() || is_cart() || is_checkout());
+
+        if (!$checkout_blocked && !$is_portal_page) {
+            return;
+        }
 
         wp_enqueue_style(
             'pe-b2b-portal',
@@ -377,22 +407,6 @@ class PE_Core {
             PE_VERSION,
             true
         );
-
-        // Checkout blocking data for JS — evaluated on ALL pages so the mini-cart is also updated.
-        $checkout_blocked      = false;
-        $checkout_block_reason = '';
-        $approval_button_html  = '';
-
-        if (is_user_logged_in() && class_exists('PE_Budget_Manager')) {
-            $reason = PE_Budget_Manager::get_instance()->get_checkout_block_reason();
-            if (true !== $reason) {
-                $checkout_blocked      = true;
-                $checkout_block_reason = $reason;
-                if (class_exists('PE_Approval_Manager')) {
-                    $approval_button_html = PE_Approval_Manager::get_instance()->get_approval_button_html('cart');
-                }
-            }
-        }
 
         // Nombre d'approbations en attente (pastille du menu « Approbations »).
         $pending_approvals = 0;
