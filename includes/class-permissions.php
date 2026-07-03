@@ -118,6 +118,14 @@ class PE_Permissions {
      * Vérifie si l'utilisateur appartient à l'entreprise donnée.
      */
     public static function user_belongs_to_company(int $user_id, int $company_id): bool {
+        static $memo = [];
+
+        $key = $user_id . '-' . $company_id;
+
+        if (array_key_exists($key, $memo)) {
+            return $memo[$key];
+        }
+
         global $wpdb;
 
         $count = $wpdb->get_var(
@@ -128,7 +136,9 @@ class PE_Permissions {
             )
         );
 
-        return (int) $count > 0;
+        $memo[$key] = (int) $count > 0;
+
+        return $memo[$key];
     }
 
     /**
