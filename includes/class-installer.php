@@ -46,6 +46,7 @@ class PE_Installer {
             siret VARCHAR(14) NOT NULL DEFAULT '',
             vat_number VARCHAR(20) NOT NULL DEFAULT '',
             billing_address LONGTEXT NULL,
+            shipping_address LONGTEXT NULL,
             discount_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             payment_terms INT UNSIGNED NOT NULL DEFAULT 30,
@@ -237,6 +238,12 @@ class PE_Installer {
         $col_profile = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'tdw_profile_slug'");
         if (!$col_profile) {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN tdw_profile_slug VARCHAR(100) DEFAULT NULL");
+        }
+
+        // Migrate: add shipping_address column if missing (v1.5.0)
+        $col_shipping = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'shipping_address'");
+        if (!$col_shipping) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN shipping_address LONGTEXT NULL AFTER billing_address");
         }
 
         self::update_db_version();

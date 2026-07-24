@@ -19,13 +19,23 @@ if (!$company) {
 $agencies     = $company_mgr->get_agencies((int) $company->id);
 $cost_centers = $company_mgr->get_cost_centers((int) $company->id);
 
-// Adresse de facturation depuis WooCommerce (pas depuis b2b_companies)
+// Adresses de facturation et de livraison depuis WooCommerce (pas depuis b2b_companies) :
+// la fiche société synchronise ces champs vers tous les membres, et toute modification
+// par un membre depuis « Mon compte » remonte à son tour vers la société.
 $wc_customer   = new WC_Customer($user_id);
 $billing_parts = array_filter([
     $wc_customer->get_billing_address_1(),
     $wc_customer->get_billing_address_2(),
     trim($wc_customer->get_billing_postcode() . ' ' . $wc_customer->get_billing_city()),
     $wc_customer->get_billing_country() ? WC()->countries->countries[ $wc_customer->get_billing_country() ] ?? $wc_customer->get_billing_country() : '',
+]);
+
+$show_shipping = wc_shipping_enabled() && !wc_ship_to_billing_address_only();
+$shipping_parts = array_filter([
+    $wc_customer->get_shipping_address_1(),
+    $wc_customer->get_shipping_address_2(),
+    trim($wc_customer->get_shipping_postcode() . ' ' . $wc_customer->get_shipping_city()),
+    $wc_customer->get_shipping_country() ? WC()->countries->countries[ $wc_customer->get_shipping_country() ] ?? $wc_customer->get_shipping_country() : '',
 ]);
 ?>
 
@@ -103,6 +113,32 @@ $billing_parts = array_filter([
             <?php endif; ?>
         </div>
     </div>
+
+    <!-- Adresse de livraison -->
+    <?php if ($show_shipping) : ?>
+    <div class="pe-card" style="margin-top:20px;">
+        <div class="pe-card-header" style="display:flex;align-items:center;justify-content:space-between;">
+            <h3><?php esc_html_e('Adresse de livraison', 'portail-entreprises'); ?></h3>
+            <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-address') . 'shipping/'); ?>" class="pe-btn pe-btn-sm pe-btn-outline">
+                <?php esc_html_e('Modifier →', 'portail-entreprises'); ?>
+            </a>
+        </div>
+        <div class="pe-card-body">
+            <?php if (!empty($shipping_parts)) : ?>
+            <address class="pe-address" style="font-style:normal;line-height:1.7;">
+                <?php echo nl2br(esc_html(implode("\n", $shipping_parts))); ?>
+            </address>
+            <?php else : ?>
+            <p class="pe-text-muted">
+                <?php esc_html_e('Aucune adresse de livraison renseignée (l\'adresse de facturation sera utilisée par défaut).', 'portail-entreprises'); ?>
+                <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-address') . 'shipping/'); ?>">
+                    <?php esc_html_e('Ajouter une adresse →', 'portail-entreprises'); ?>
+                </a>
+            </p>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Agences -->
     <?php if (!empty($agencies)) : ?>

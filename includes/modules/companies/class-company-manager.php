@@ -32,17 +32,18 @@ class PE_Company_Manager {
         }
 
         $insert_data = [
-            'name'            => sanitize_text_field($data['name']),
-            'siret'           => sanitize_text_field($data['siret'] ?? ''),
-            'vat_number'      => sanitize_text_field($data['vat_number'] ?? ''),
-            'billing_address' => wp_json_encode($data['billing_address'] ?? []),
-            'discount_rate'   => (float) ($data['discount_rate'] ?? 0),
-            'credit_limit'    => (float) ($data['credit_limit'] ?? 0),
-            'payment_terms'   => (int) ($data['payment_terms'] ?? 30),
-            'status'          => in_array($data['status'] ?? 'active', ['active', 'suspended'], true) ? $data['status'] : 'active',
-            'modules_enabled' => wp_json_encode($data['modules_enabled'] ?? []),
+            'name'             => sanitize_text_field($data['name']),
+            'siret'            => sanitize_text_field($data['siret'] ?? ''),
+            'vat_number'       => sanitize_text_field($data['vat_number'] ?? ''),
+            'billing_address'  => wp_json_encode($data['billing_address'] ?? []),
+            'shipping_address' => wp_json_encode($data['shipping_address'] ?? []),
+            'discount_rate'    => (float) ($data['discount_rate'] ?? 0),
+            'credit_limit'     => (float) ($data['credit_limit'] ?? 0),
+            'payment_terms'    => (int) ($data['payment_terms'] ?? 30),
+            'status'           => in_array($data['status'] ?? 'active', ['active', 'suspended'], true) ? $data['status'] : 'active',
+            'modules_enabled'  => wp_json_encode($data['modules_enabled'] ?? []),
         ];
-        $formats = ['%s', '%s', '%s', '%s', '%f', '%f', '%d', '%s', '%s'];
+        $formats = ['%s', '%s', '%s', '%s', '%s', '%f', '%f', '%d', '%s', '%s'];
 
         // assigned_rep_id est nullable — on l'insère seulement si fourni pour éviter NULL+%d.
         if (!empty($data['assigned_rep_id'])) {
@@ -144,6 +145,10 @@ class PE_Company_Manager {
             $update_data['billing_address'] = wp_json_encode($data['billing_address']);
             $update_format[]                = '%s';
         }
+        if (isset($data['shipping_address'])) {
+            $update_data['shipping_address'] = wp_json_encode($data['shipping_address']);
+            $update_format[]                 = '%s';
+        }
         if (isset($data['discount_rate'])) {
             $update_data['discount_rate'] = (float) $data['discount_rate'];
             $update_format[]              = '%f';
@@ -194,7 +199,7 @@ class PE_Company_Manager {
             foreach ($update_data as $field => $new_val) {
                 $old_raw = ($company_before && property_exists($company_before, $field)) ? $company_before->$field : null;
 
-                if (in_array($field, ['billing_address', 'modules_enabled'], true)) {
+                if (in_array($field, ['billing_address', 'shipping_address', 'modules_enabled'], true)) {
                     if (json_decode((string) $old_raw, true) !== json_decode((string) $new_val, true)) {
                         $changes[$field] = ['from' => $old_raw, 'to' => $new_val];
                     }
@@ -230,8 +235,8 @@ class PE_Company_Manager {
 
             do_action( 'pe_company_updated', $id );
 
-            if (isset($update_data['billing_address'])) {
-                $this->sync_billing_address_to_members($id);
+            if (isset($update_data['billing_address']) || isset($update_data['shipping_address'])) {
+                $this->sync_company_addresses_to_members($id);
             }
 
             // Le profil de remise pilote le rôle WordPress des membres : on
@@ -245,23 +250,30 @@ class PE_Company_Manager {
     }
 
     /**
-     * Synchronise l'adresse de facturation de la société dans le profil WooCommerce d'un membre.
+     * Synchronise les adresses (facturation + livraison) de la société dans le profil WooCommerce d'un membre.
      */
-    public function sync_billing_address_to_user(int $user_id, int $company_id): void {
+    public function sync_company_addresses_to_user(int $user_id, int $company_id): void {
         $company = $this->get_company($company_id);
         if (!$company) {
             return;
         }
 
-        $billing = (array) json_decode($company->billing_address, true);
+        $billing  = (array) json_decode($company->billing_address, true);
+        $shipping = (array) json_decode($company->shipping_address ?? '', true);
 
         $meta_map = [
-            'billing_address_1' => $billing['address_1'] ?? '',
-            'billing_address_2' => $billing['address_2'] ?? '',
-            'billing_city'      => $billing['city'] ?? '',
-            'billing_postcode'  => $billing['postcode'] ?? '',
-            'billing_country'   => $billing['country'] ?? 'FR',
-            'billing_company'   => $company->name,
+            'billing_address_1'  => $billing['address_1'] ?? '',
+            'billing_address_2'  => $billing['address_2'] ?? '',
+            'billing_city'       => $billing['city'] ?? '',
+            'billing_postcode'   => $billing['postcode'] ?? '',
+            'billing_country'    => $billing['country'] ?? 'FR',
+            'billing_company'    => $company->name,
+            'shipping_address_1' => $shipping['address_1'] ?? '',
+            'shipping_address_2' => $shipping['address_2'] ?? '',
+            'shipping_city'      => $shipping['city'] ?? '',
+            'shipping_postcode'  => $shipping['postcode'] ?? '',
+            'shipping_country'   => $shipping['country'] ?? 'FR',
+            'shipping_company'   => $company->name,
         ];
 
         foreach ($meta_map as $meta_key => $meta_value) {
@@ -270,13 +282,54 @@ class PE_Company_Manager {
     }
 
     /**
-     * Synchronise l'adresse de facturation de la société vers tous ses membres.
+     * Synchronise les adresses de la société vers tous ses membres.
      */
-    public function sync_billing_address_to_members(int $company_id): void {
+    public function sync_company_addresses_to_members(int $company_id): void {
         $users = $this->get_company_users($company_id);
         foreach ($users as $user) {
-            $this->sync_billing_address_to_user((int) $user->user_id, $company_id);
+            $this->sync_company_addresses_to_user((int) $user->user_id, $company_id);
         }
+    }
+
+    /**
+     * Remonte l'adresse WooCommerce (facturation ou livraison) qu'un membre vient
+     * d'enregistrer dans son compte vers la fiche société, puis la repropage à
+     * tous les autres membres afin que l'adresse reste identique pour toute la société.
+     *
+     * @param int    $user_id ID de l'utilisateur ayant modifié son adresse.
+     * @param string $type    'billing' ou 'shipping'.
+     */
+    public function sync_member_address_to_company(int $user_id, string $type): void {
+        if (!in_array($type, ['billing', 'shipping'], true)) {
+            return;
+        }
+
+        $company = PE_Permissions::get_user_company($user_id);
+        if (!$company) {
+            return;
+        }
+
+        $customer = new \WC_Customer($user_id);
+
+        if ('billing' === $type) {
+            $address = [
+                'address_1' => $customer->get_billing_address_1(),
+                'address_2' => $customer->get_billing_address_2(),
+                'city'      => $customer->get_billing_city(),
+                'postcode'  => $customer->get_billing_postcode(),
+                'country'   => $customer->get_billing_country(),
+            ];
+        } else {
+            $address = [
+                'address_1' => $customer->get_shipping_address_1(),
+                'address_2' => $customer->get_shipping_address_2(),
+                'city'      => $customer->get_shipping_city(),
+                'postcode'  => $customer->get_shipping_postcode(),
+                'country'   => $customer->get_shipping_country(),
+            ];
+        }
+
+        $this->update_company((int) $company->id, [$type . '_address' => $address]);
     }
 
     /**
@@ -495,7 +548,7 @@ class PE_Company_Manager {
 
         if (false !== $result) {
             PE_Permissions::flush_user_cache($user_id);
-            $this->sync_billing_address_to_user($user_id, $company_id);
+            $this->sync_company_addresses_to_user($user_id, $company_id);
             $this->sync_user_profile_role($user_id);
 
             PE_Audit_Log::get_instance()->log(

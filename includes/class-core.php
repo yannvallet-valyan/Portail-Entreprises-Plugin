@@ -75,9 +75,13 @@ class PE_Core {
         add_action('woocommerce_account_b2b-order_endpoint', [$this, 'render_b2b_order']);
         add_filter('woocommerce_endpoint_b2b-order_title', fn() => __('Détail de la commande', 'portail-entreprises'));
 
-        // Adresse de facturation société : pré-remplissage checkout + protection du profil
+        // Adresses (facturation + livraison) société : pré-remplissage checkout + protection du profil
         add_filter('woocommerce_checkout_get_value', [$this, 'prefill_checkout_billing_from_company'], 10, 2);
         add_action('woocommerce_checkout_update_customer', [$this, 'restore_company_billing_after_checkout'], 10, 2);
+
+        // Un membre modifie son adresse dans « Mon compte » → remontée vers la société,
+        // puis repropagée à tous les autres membres (adresse partagée par la société).
+        add_action('woocommerce_customer_save_address', [$this, 'sync_member_address_to_company'], 10, 2);
 
         // E-mails sortants : expéditeur du portail via le système natif WordPress.
         // - wp_mail_from / wp_mail_from_name : définit l'adresse et le nom d'expéditeur
@@ -722,24 +726,32 @@ class PE_Core {
     }
 
     /**
-     * Pré-remplit les champs de facturation au checkout avec l'adresse de la société.
-     * Priorité sur l'adresse éventuellement stockée dans le profil personnel du membre.
+     * Pré-remplit les champs de facturation et de livraison au checkout avec les
+     * adresses de la société. Priorité sur l'adresse éventuellement stockée dans
+     * le profil personnel du membre. Si l'adresse de livraison de la société n'est
+     * pas renseignée, on retombe sur l'adresse de facturation.
      *
      * @param mixed  $value Valeur par défaut (null si aucune).
-     * @param string $input Nom du champ checkout (ex : billing_address_1).
+     * @param string $input Nom du champ checkout (ex : billing_address_1, shipping_address_1).
      * @return mixed
      */
     public function prefill_checkout_billing_from_company($value, string $input) {
-        static $billing_fields = [
+        static $address_fields = [
             'billing_address_1',
             'billing_address_2',
             'billing_city',
             'billing_postcode',
             'billing_country',
             'billing_company',
+            'shipping_address_1',
+            'shipping_address_2',
+            'shipping_city',
+            'shipping_postcode',
+            'shipping_country',
+            'shipping_company',
         ];
 
-        if (!in_array($input, $billing_fields, true)) {
+        if (!in_array($input, $address_fields, true)) {
             return $value;
         }
 
@@ -758,24 +770,36 @@ class PE_Core {
             return $value;
         }
 
-        $billing = (array) json_decode($company->billing_address, true);
+        $billing  = (array) json_decode($company->billing_address, true);
+        $shipping = (array) json_decode($company->shipping_address ?? '', true);
+        // Retombe sur l'adresse de facturation si aucune adresse de livraison n'est définie.
+        if (empty(array_filter($shipping))) {
+            $shipping = $billing;
+        }
 
         $field_map = [
-            'billing_address_1' => $billing['address_1'] ?? '',
-            'billing_address_2' => $billing['address_2'] ?? '',
-            'billing_city'      => $billing['city'] ?? '',
-            'billing_postcode'  => $billing['postcode'] ?? '',
-            'billing_country'   => $billing['country'] ?? 'FR',
-            'billing_company'   => $company->name,
+            'billing_address_1'  => $billing['address_1'] ?? '',
+            'billing_address_2'  => $billing['address_2'] ?? '',
+            'billing_city'       => $billing['city'] ?? '',
+            'billing_postcode'   => $billing['postcode'] ?? '',
+            'billing_country'    => $billing['country'] ?? 'FR',
+            'billing_company'    => $company->name,
+            'shipping_address_1' => $shipping['address_1'] ?? '',
+            'shipping_address_2' => $shipping['address_2'] ?? '',
+            'shipping_city'      => $shipping['city'] ?? '',
+            'shipping_postcode'  => $shipping['postcode'] ?? '',
+            'shipping_country'   => $shipping['country'] ?? 'FR',
+            'shipping_company'   => $company->name,
         ];
 
         return $field_map[$input] ?? $value;
     }
 
     /**
-     * Restaure l'adresse de facturation de la société dans le profil WooCommerce du membre
-     * après un passage en caisse, afin que la commande garde l'adresse saisie par le membre
-     * mais que le profil conserve toujours l'adresse officielle de la société.
+     * Restaure les adresses de facturation et de livraison de la société dans le profil
+     * WooCommerce du membre après un passage en caisse, afin que la commande garde
+     * l'adresse saisie par le membre mais que le profil conserve toujours l'adresse
+     * officielle de la société.
      *
      * Le hook s'exécute avant $customer->save() : WooCommerce enregistre alors l'adresse
      * société en user meta, tandis que la commande (créée plus tard depuis $_POST) conserve
@@ -792,7 +816,11 @@ class PE_Core {
             return;
         }
 
-        $billing = (array) json_decode($company->billing_address, true);
+        $billing  = (array) json_decode($company->billing_address, true);
+        $shipping = (array) json_decode($company->shipping_address ?? '', true);
+        if (empty(array_filter($shipping))) {
+            $shipping = $billing;
+        }
 
         $customer->set_billing_address_1($billing['address_1'] ?? '');
         $customer->set_billing_address_2($billing['address_2'] ?? '');
@@ -800,6 +828,28 @@ class PE_Core {
         $customer->set_billing_postcode($billing['postcode'] ?? '');
         $customer->set_billing_country($billing['country'] ?? 'FR');
         $customer->set_billing_company($company->name);
+
+        $customer->set_shipping_address_1($shipping['address_1'] ?? '');
+        $customer->set_shipping_address_2($shipping['address_2'] ?? '');
+        $customer->set_shipping_city($shipping['city'] ?? '');
+        $customer->set_shipping_postcode($shipping['postcode'] ?? '');
+        $customer->set_shipping_country($shipping['country'] ?? 'FR');
+        $customer->set_shipping_company($company->name);
+    }
+
+    /**
+     * Remonte vers la société l'adresse qu'un membre vient d'enregistrer depuis
+     * « Mon compte → Adresses », puis la repropage à tous les autres membres.
+     *
+     * @param int    $user_id      ID de l'utilisateur ayant modifié son adresse.
+     * @param string $load_address 'billing' ou 'shipping'.
+     */
+    public function sync_member_address_to_company(int $user_id, string $load_address): void {
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+            return;
+        }
+
+        PE_Company_Manager::get_instance()->sync_member_address_to_company($user_id, $load_address);
     }
 
     /**
