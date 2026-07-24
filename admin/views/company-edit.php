@@ -15,6 +15,7 @@ if (!$is_new && !$company) {
 }
 
 $billing_address  = $company ? (array) json_decode($company->billing_address, true) : [];
+$shipping_address = $company ? (array) json_decode($company->shipping_address ?? '', true) : [];
 $modules_enabled  = $company ? (array) json_decode($company->modules_enabled, true) : [];
 $company_users    = $is_new ? [] : $manager->get_company_users($company_id);
 $approval_rules   = $is_new ? [] : $manager->get_approval_rules($company_id);
@@ -126,6 +127,41 @@ $all_roles = PE_Permissions::get_roles();
                         <th><label for="billing_country"><?php esc_html_e('Pays', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="billing_country" name="billing_country" class="small-text" maxlength="2"
                                    value="<?php echo esc_attr($billing_address['country'] ?? 'FR'); ?>" /></td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Adresse de livraison -->
+            <div class="pe-form-card">
+                <h2><?php esc_html_e('Adresse de livraison', 'portail-entreprises'); ?></h2>
+                <p class="description" style="margin-top:-6px;">
+                    <?php esc_html_e('Laissez vide pour utiliser l\'adresse de facturation par défaut.', 'portail-entreprises'); ?>
+                </p>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="shipping_address_1"><?php esc_html_e('Adresse ligne 1', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="shipping_address_1" name="shipping_address_1" class="regular-text"
+                                   value="<?php echo esc_attr($shipping_address['address_1'] ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="shipping_address_2"><?php esc_html_e('Adresse ligne 2', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="shipping_address_2" name="shipping_address_2" class="regular-text"
+                                   value="<?php echo esc_attr($shipping_address['address_2'] ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="shipping_city"><?php esc_html_e('Ville', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="shipping_city" name="shipping_city" class="regular-text"
+                                   value="<?php echo esc_attr($shipping_address['city'] ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="shipping_postcode"><?php esc_html_e('Code postal', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="shipping_postcode" name="shipping_postcode" class="small-text"
+                                   value="<?php echo esc_attr($shipping_address['postcode'] ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="shipping_country"><?php esc_html_e('Pays', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="shipping_country" name="shipping_country" class="small-text" maxlength="2"
+                                   value="<?php echo esc_attr($shipping_address['country'] ?? 'FR'); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -657,6 +693,7 @@ $all_roles = PE_Permissions::get_roles();
             'siret'            => __('SIRET', 'portail-entreprises'),
             'vat_number'       => __('N° TVA', 'portail-entreprises'),
             'billing_address'  => __('Adresse de facturation', 'portail-entreprises'),
+            'shipping_address' => __('Adresse de livraison', 'portail-entreprises'),
             'discount_rate'    => __('Remise', 'portail-entreprises'),
             'credit_limit'     => __('Limite de crédit', 'portail-entreprises'),
             'payment_terms'    => __('Délai de paiement', 'portail-entreprises'),
@@ -698,7 +735,7 @@ $all_roles = PE_Permissions::get_roles();
                         $from    = $is_diff ? $change['from'] : null;
                         $to      = $is_diff ? $change['to'] : $change;
 
-                        if ($field === 'billing_address') {
+                        if ($field === 'billing_address' || $field === 'shipping_address') {
                             $details[] = $label . ' modifiée';
                         } elseif ($field === 'modules_enabled') {
                             $new_mods = is_string($to) ? (array) json_decode((string) $to, true) : (array) $to;

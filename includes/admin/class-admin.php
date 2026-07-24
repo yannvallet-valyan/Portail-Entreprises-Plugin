@@ -152,6 +152,13 @@ class PE_Admin {
                 'postcode'  => sanitize_text_field(wp_unslash($_POST['billing_postcode'] ?? '')),
                 'country'   => sanitize_text_field(wp_unslash($_POST['billing_country'] ?? '')),
             ],
+            'shipping_address' => [
+                'address_1' => sanitize_text_field(wp_unslash($_POST['shipping_address_1'] ?? '')),
+                'address_2' => sanitize_text_field(wp_unslash($_POST['shipping_address_2'] ?? '')),
+                'city'      => sanitize_text_field(wp_unslash($_POST['shipping_city'] ?? '')),
+                'postcode'  => sanitize_text_field(wp_unslash($_POST['shipping_postcode'] ?? '')),
+                'country'   => sanitize_text_field(wp_unslash($_POST['shipping_country'] ?? '')),
+            ],
         ];
 
         if (class_exists('TDW_B2B_Taxonomies')) {
@@ -200,6 +207,13 @@ class PE_Admin {
                 'city'      => sanitize_text_field(wp_unslash($_POST['billing_city'] ?? '')),
                 'postcode'  => sanitize_text_field(wp_unslash($_POST['billing_postcode'] ?? '')),
                 'country'   => sanitize_text_field(wp_unslash($_POST['billing_country'] ?? '')),
+            ],
+            'shipping_address' => [
+                'address_1' => sanitize_text_field(wp_unslash($_POST['shipping_address_1'] ?? '')),
+                'address_2' => sanitize_text_field(wp_unslash($_POST['shipping_address_2'] ?? '')),
+                'city'      => sanitize_text_field(wp_unslash($_POST['shipping_city'] ?? '')),
+                'postcode'  => sanitize_text_field(wp_unslash($_POST['shipping_postcode'] ?? '')),
+                'country'   => sanitize_text_field(wp_unslash($_POST['shipping_country'] ?? '')),
             ],
         ];
 
