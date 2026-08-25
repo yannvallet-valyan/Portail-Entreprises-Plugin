@@ -22,6 +22,7 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
         add_action('wp_ajax_pe_admin_search_users', [$this, 'ajax_admin_search_users']);
+        add_action('wp_ajax_pe_admin_get_customer_prefill', [$this, 'ajax_admin_get_customer_prefill']);
         add_action('wp_ajax_pe_admin_invite_user_to_company', [$this, 'ajax_admin_invite_user_to_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
@@ -762,6 +763,58 @@ class PE_Admin {
         ], $users);
 
         wp_send_json_success(['users' => array_values($results)]);
+    }
+
+    /**
+     * Renvoie les coordonnées connues d'un client existant (utilisateur WordPress/WooCommerce)
+     * afin de pré-remplir le contact et les adresses d'une société — utilisé lorsqu'on
+     * rattache un client déjà connu au lieu de ressaisir ses informations.
+     */
+    public function ajax_admin_get_customer_prefill(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $user    = $user_id ? get_userdata($user_id) : null;
+
+        if (!$user) {
+            wp_send_json_error(['message' => __('Utilisateur introuvable.', 'portail-entreprises')]);
+        }
+
+        $billing_address  = ['address_1' => '', 'address_2' => '', 'city' => '', 'postcode' => '', 'country' => ''];
+        $shipping_address = $billing_address;
+        $phone            = '';
+
+        if (class_exists('WC_Customer')) {
+            $customer = new \WC_Customer($user_id);
+
+            $billing_address = [
+                'address_1' => $customer->get_billing_address_1(),
+                'address_2' => $customer->get_billing_address_2(),
+                'city'      => $customer->get_billing_city(),
+                'postcode'  => $customer->get_billing_postcode(),
+                'country'   => $customer->get_billing_country(),
+            ];
+            $shipping_address = [
+                'address_1' => $customer->get_shipping_address_1(),
+                'address_2' => $customer->get_shipping_address_2(),
+                'city'      => $customer->get_shipping_city(),
+                'postcode'  => $customer->get_shipping_postcode(),
+                'country'   => $customer->get_shipping_country(),
+            ];
+            $phone = $customer->get_billing_phone();
+        }
+
+        wp_send_json_success([
+            'first_name'       => $user->first_name,
+            'last_name'        => $user->last_name,
+            'phone'            => $phone,
+            'billing_address'  => $billing_address,
+            'shipping_address' => $shipping_address,
+        ]);
     }
 
     public function ajax_admin_invite_user_to_company(): void {

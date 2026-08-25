@@ -139,6 +139,21 @@ $all_roles = PE_Permissions::get_roles();
                 <p class="description" style="margin-top:-6px;">
                     <?php esc_html_e('Contact principal de la société.', 'portail-entreprises'); ?>
                 </p>
+
+                <div style="position:relative; margin-bottom:14px;">
+                    <label for="pe-contact-search-input" style="display:block; font-weight:600; margin-bottom:4px;">
+                        <?php esc_html_e('Rattacher un client existant', 'portail-entreprises'); ?>
+                    </label>
+                    <input type="text" id="pe-contact-search-input" class="regular-text" style="width:100%;"
+                           placeholder="<?php esc_attr_e('Nom ou e-mail…', 'portail-entreprises'); ?>" autocomplete="off" />
+                    <div id="pe-contact-search-results"
+                         style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; max-height:220px; overflow-y:auto; z-index:200; box-shadow:0 2px 6px rgba(0,0,0,.15);"></div>
+                    <p class="description" style="margin:4px 0 0;">
+                        <?php esc_html_e('Sélectionnez un client existant pour remplir automatiquement son nom et, s\'il les a déjà renseignées, ses adresses de facturation et de livraison.', 'portail-entreprises'); ?>
+                    </p>
+                    <p id="pe-contact-search-msg" style="margin-top:6px; font-weight:600;"></p>
+                </div>
+
                 <table class="form-table">
                     <tr>
                         <th><label for="contact_function"><?php esc_html_e('Fonction', 'portail-entreprises'); ?></label></th>
@@ -157,6 +172,75 @@ $all_roles = PE_Permissions::get_roles();
                     </tr>
                 </table>
             </div>
+
+            <script>
+            jQuery(function($) {
+                var searchTimer;
+                var ajaxNonce  = '<?php echo esc_js(wp_create_nonce('pe_b2b_ajax')); ?>';
+                var companyId  = <?php echo (int) $company_id; ?>;
+
+                function setIfPresent(id, val) {
+                    if (val !== undefined && val !== null && val !== '') {
+                        $('#' + id).val(val);
+                    }
+                }
+
+                $('#pe-contact-search-input').on('keyup', function() {
+                    clearTimeout(searchTimer);
+                    var q = $(this).val().trim();
+                    if (q.length < 2) { $('#pe-contact-search-results').hide().empty(); return; }
+                    searchTimer = setTimeout(function() {
+                        $.post(ajaxurl, { action: 'pe_admin_search_users', nonce: ajaxNonce, search: q, company_id: companyId }, function(res) {
+                            var $list = $('#pe-contact-search-results').empty();
+                            if (res.success && res.data.users.length) {
+                                $.each(res.data.users, function(i, u) {
+                                    $('<div>').text(u.name + ' — ' + u.email)
+                                        .css({ padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' })
+                                        .on('mouseenter', function() { $(this).css('background', '#f0f6ff'); })
+                                        .on('mouseleave', function() { $(this).css('background', ''); })
+                                        .on('click', function() {
+                                            $('#pe-contact-search-input').val(u.name);
+                                            $list.hide().empty();
+                                            $('#pe-contact-search-msg').css('color', '#666').text('<?php echo esc_js(__('Chargement des informations…', 'portail-entreprises')); ?>');
+
+                                            $.post(ajaxurl, { action: 'pe_admin_get_customer_prefill', nonce: ajaxNonce, user_id: u.id }, function(res2) {
+                                                if (res2.success) {
+                                                    var d = res2.data;
+                                                    setIfPresent('contact_first_name', d.first_name);
+                                                    setIfPresent('contact_last_name', d.last_name);
+                                                    setIfPresent('billing_address_1', d.billing_address.address_1);
+                                                    setIfPresent('billing_address_2', d.billing_address.address_2);
+                                                    setIfPresent('billing_city', d.billing_address.city);
+                                                    setIfPresent('billing_postcode', d.billing_address.postcode);
+                                                    setIfPresent('billing_country', d.billing_address.country);
+                                                    setIfPresent('shipping_address_1', d.shipping_address.address_1);
+                                                    setIfPresent('shipping_address_2', d.shipping_address.address_2);
+                                                    setIfPresent('shipping_city', d.shipping_address.city);
+                                                    setIfPresent('shipping_postcode', d.shipping_address.postcode);
+                                                    setIfPresent('shipping_country', d.shipping_address.country);
+                                                    $('#pe-contact-search-msg').css('color', '#28a745')
+                                                        .text('<?php echo esc_js(__('Contact et adresses pré-remplis. Vérifiez avant d\'enregistrer.', 'portail-entreprises')); ?>');
+                                                } else {
+                                                    $('#pe-contact-search-msg').css('color', '#b32d2e').text(res2.data.message);
+                                                }
+                                            });
+                                        }).appendTo($list);
+                                });
+                                $list.show();
+                            } else {
+                                $list.append($('<div>').text('<?php echo esc_js(__('Aucun résultat.', 'portail-entreprises')); ?>').css({ padding: '7px 12px', color: '#888' })).show();
+                            }
+                        });
+                    }, 300);
+                });
+
+                $(document).on('click', function(e) {
+                    if (!$(e.target).closest('#pe-contact-search-input, #pe-contact-search-results').length) {
+                        $('#pe-contact-search-results').hide();
+                    }
+                });
+            });
+            </script>
 
             <!-- Adresse de facturation -->
             <div class="pe-form-card">
