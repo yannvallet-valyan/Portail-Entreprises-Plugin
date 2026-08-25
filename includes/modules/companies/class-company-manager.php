@@ -32,18 +32,30 @@ class PE_Company_Manager {
         }
 
         $insert_data = [
-            'name'             => sanitize_text_field($data['name']),
-            'siret'            => sanitize_text_field($data['siret'] ?? ''),
-            'vat_number'       => sanitize_text_field($data['vat_number'] ?? ''),
-            'billing_address'  => wp_json_encode($data['billing_address'] ?? []),
-            'shipping_address' => wp_json_encode($data['shipping_address'] ?? []),
-            'discount_rate'    => (float) ($data['discount_rate'] ?? 0),
-            'credit_limit'     => (float) ($data['credit_limit'] ?? 0),
-            'payment_terms'    => (int) ($data['payment_terms'] ?? 30),
-            'status'           => in_array($data['status'] ?? 'active', ['active', 'suspended'], true) ? $data['status'] : 'active',
-            'modules_enabled'  => wp_json_encode($data['modules_enabled'] ?? []),
+            'name'                  => sanitize_text_field($data['name']),
+            'customer_code'         => sanitize_text_field($data['customer_code'] ?? ''),
+            'siret'                 => sanitize_text_field($data['siret'] ?? ''),
+            'vat_number'            => sanitize_text_field($data['vat_number'] ?? ''),
+            'naf_code'              => sanitize_text_field($data['naf_code'] ?? ''),
+            'billing_address'       => wp_json_encode($data['billing_address'] ?? []),
+            'shipping_address'      => wp_json_encode($data['shipping_address'] ?? []),
+            'phone'                 => sanitize_text_field($data['phone'] ?? ''),
+            'fax'                   => sanitize_text_field($data['fax'] ?? ''),
+            'contact_function'      => sanitize_text_field($data['contact_function'] ?? ''),
+            'contact_first_name'    => sanitize_text_field($data['contact_first_name'] ?? ''),
+            'contact_last_name'     => sanitize_text_field($data['contact_last_name'] ?? ''),
+            'discount_rate'         => (float) ($data['discount_rate'] ?? 0),
+            'credit_limit'          => (float) ($data['credit_limit'] ?? 0),
+            'payment_terms'         => (int) ($data['payment_terms'] ?? 30),
+            'payment_method_code'   => sanitize_text_field($data['payment_method_code'] ?? ''),
+            'payment_method_label'  => sanitize_text_field($data['payment_method_label'] ?? ''),
+            'category'              => sanitize_text_field($data['category'] ?? ''),
+            'activity'              => sanitize_text_field($data['activity'] ?? ''),
+            'comments'              => sanitize_textarea_field($data['comments'] ?? ''),
+            'status'                => in_array($data['status'] ?? 'active', ['active', 'suspended'], true) ? $data['status'] : 'active',
+            'modules_enabled'       => wp_json_encode($data['modules_enabled'] ?? []),
         ];
-        $formats = ['%s', '%s', '%s', '%s', '%s', '%f', '%f', '%d', '%s', '%s'];
+        $formats = ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s'];
 
         // assigned_rep_id est nullable — on l'insère seulement si fourni pour éviter NULL+%d.
         if (!empty($data['assigned_rep_id'])) {
@@ -133,6 +145,10 @@ class PE_Company_Manager {
             $update_data['name'] = sanitize_text_field($data['name']);
             $update_format[]     = '%s';
         }
+        if (isset($data['customer_code'])) {
+            $update_data['customer_code'] = sanitize_text_field($data['customer_code']);
+            $update_format[]              = '%s';
+        }
         if (isset($data['siret'])) {
             $update_data['siret'] = sanitize_text_field($data['siret']);
             $update_format[]      = '%s';
@@ -140,6 +156,50 @@ class PE_Company_Manager {
         if (isset($data['vat_number'])) {
             $update_data['vat_number'] = sanitize_text_field($data['vat_number']);
             $update_format[]           = '%s';
+        }
+        if (isset($data['naf_code'])) {
+            $update_data['naf_code'] = sanitize_text_field($data['naf_code']);
+            $update_format[]         = '%s';
+        }
+        if (isset($data['phone'])) {
+            $update_data['phone'] = sanitize_text_field($data['phone']);
+            $update_format[]      = '%s';
+        }
+        if (isset($data['fax'])) {
+            $update_data['fax'] = sanitize_text_field($data['fax']);
+            $update_format[]    = '%s';
+        }
+        if (isset($data['contact_function'])) {
+            $update_data['contact_function'] = sanitize_text_field($data['contact_function']);
+            $update_format[]                 = '%s';
+        }
+        if (isset($data['contact_first_name'])) {
+            $update_data['contact_first_name'] = sanitize_text_field($data['contact_first_name']);
+            $update_format[]                   = '%s';
+        }
+        if (isset($data['contact_last_name'])) {
+            $update_data['contact_last_name'] = sanitize_text_field($data['contact_last_name']);
+            $update_format[]                  = '%s';
+        }
+        if (isset($data['payment_method_code'])) {
+            $update_data['payment_method_code'] = sanitize_text_field($data['payment_method_code']);
+            $update_format[]                    = '%s';
+        }
+        if (isset($data['payment_method_label'])) {
+            $update_data['payment_method_label'] = sanitize_text_field($data['payment_method_label']);
+            $update_format[]                     = '%s';
+        }
+        if (isset($data['category'])) {
+            $update_data['category'] = sanitize_text_field($data['category']);
+            $update_format[]         = '%s';
+        }
+        if (isset($data['activity'])) {
+            $update_data['activity'] = sanitize_text_field($data['activity']);
+            $update_format[]         = '%s';
+        }
+        if (isset($data['comments'])) {
+            $update_data['comments'] = sanitize_textarea_field($data['comments']);
+            $update_format[]         = '%s';
         }
         if (isset($data['billing_address'])) {
             $update_data['billing_address'] = wp_json_encode($data['billing_address']);
@@ -662,8 +722,9 @@ class PE_Company_Manager {
         }
 
         if ($search) {
-            $where[]  = '(name LIKE %s OR siret LIKE %s)';
+            $where[]  = '(name LIKE %s OR siret LIKE %s OR customer_code LIKE %s)';
             $like     = '%' . $wpdb->esc_like($search) . '%';
+            $params[] = $like;
             $params[] = $like;
             $params[] = $like;
         }
@@ -701,8 +762,9 @@ class PE_Company_Manager {
         }
 
         if ($search) {
-            $where[]  = '(name LIKE %s OR siret LIKE %s)';
+            $where[]  = '(name LIKE %s OR siret LIKE %s OR customer_code LIKE %s)';
             $like     = '%' . $wpdb->esc_like($search) . '%';
+            $params[] = $like;
             $params[] = $like;
             $params[] = $like;
         }
@@ -860,6 +922,40 @@ class PE_Company_Manager {
         do_action( 'pe_company_deleted', $company_id );
 
         return true;
+    }
+
+    /**
+     * Date de la dernière commande de la société (au format Y-m-d H:i:s), ou null si aucune.
+     */
+    public function get_last_order_date(int $company_id): ?string {
+        if (!class_exists('PE_Core') || !function_exists('wc_get_orders')) {
+            return null;
+        }
+
+        $orders = PE_Core::get_company_orders($company_id, 1);
+        if (empty($orders)) {
+            return null;
+        }
+
+        $date = $orders[0]->get_date_created();
+        return $date ? $date->date('Y-m-d H:i:s') : null;
+    }
+
+    /**
+     * Date du dernier devis de la société, ou null si aucun.
+     *
+     * Le module devis n'est pas géré nativement par ce plugin : cette méthode
+     * délègue à un éventuel plugin de devis (ex. « Transformer en devis ») via
+     * le filtre `pe_company_last_quote_date`.
+     */
+    public function get_last_quote_date(int $company_id): ?string {
+        /**
+         * Filtre la date du dernier devis d'une société.
+         *
+         * @param string|null $date       Date (Y-m-d H:i:s) ou null si aucun devis / aucun plugin de devis actif.
+         * @param int         $company_id ID de la société.
+         */
+        return apply_filters('pe_company_last_quote_date', null, $company_id);
     }
 
     /**

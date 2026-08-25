@@ -62,12 +62,22 @@ $all_roles = PE_Permissions::get_roles();
         <?php endif; ?>
 
         <div class="pe-form-grid">
-            <!-- Informations générales -->
+            <!-- Définition -->
             <div class="pe-form-card">
-                <h2><?php esc_html_e('Informations générales', 'portail-entreprises'); ?></h2>
+                <h2><?php esc_html_e('Définition', 'portail-entreprises'); ?></h2>
                 <table class="form-table">
                     <tr>
-                        <th><label for="company_name"><?php esc_html_e('Nom de la société *', 'portail-entreprises'); ?></label></th>
+                        <th><label for="customer_code"><?php esc_html_e('Code client', 'portail-entreprises'); ?></label></th>
+                        <td>
+                            <input type="text" id="customer_code" name="customer_code" class="regular-text"
+                                   value="<?php echo esc_attr($company->customer_code ?? ''); ?>" />
+                            <p class="description">
+                                <?php esc_html_e('Identifiant interne permettant de distinguer cette société lorsqu\'un même client possède plusieurs entreprises.', 'portail-entreprises'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="company_name"><?php esc_html_e('Libellé client (nom de la société) *', 'portail-entreprises'); ?></label></th>
                         <td>
                             <input type="text" id="company_name" name="company_name" class="regular-text" required
                                    value="<?php echo esc_attr($company->name ?? ''); ?>" />
@@ -81,10 +91,17 @@ $all_roles = PE_Permissions::get_roles();
                         </td>
                     </tr>
                     <tr>
-                        <th><label for="vat_number"><?php esc_html_e('Numéro de TVA', 'portail-entreprises'); ?></label></th>
+                        <th><label for="vat_number"><?php esc_html_e('N° de TVA intracommunautaire', 'portail-entreprises'); ?></label></th>
                         <td>
                             <input type="text" id="vat_number" name="vat_number" class="regular-text"
                                    value="<?php echo esc_attr($company->vat_number ?? ''); ?>" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="naf_code"><?php esc_html_e('Code NAF', 'portail-entreprises'); ?></label></th>
+                        <td>
+                            <input type="text" id="naf_code" name="naf_code" class="regular-text" maxlength="10"
+                                   value="<?php echo esc_attr($company->naf_code ?? ''); ?>" />
                         </td>
                     </tr>
                     <tr>
@@ -95,6 +112,48 @@ $all_roles = PE_Permissions::get_roles();
                                 <option value="suspended" <?php selected($company->status ?? '', 'suspended'); ?>><?php esc_html_e('Suspendu', 'portail-entreprises'); ?></option>
                             </select>
                         </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Éléments de communication -->
+            <div class="pe-form-card">
+                <h2><?php esc_html_e('Éléments de communication', 'portail-entreprises'); ?></h2>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="phone"><?php esc_html_e('Téléphone société', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="phone" name="phone" class="regular-text"
+                                   value="<?php echo esc_attr($company->phone ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="fax"><?php esc_html_e('Fax société', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="fax" name="fax" class="regular-text"
+                                   value="<?php echo esc_attr($company->fax ?? ''); ?>" /></td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Contact principal -->
+            <div class="pe-form-card">
+                <h2><?php esc_html_e('Contact', 'portail-entreprises'); ?></h2>
+                <p class="description" style="margin-top:-6px;">
+                    <?php esc_html_e('Contact principal de la société.', 'portail-entreprises'); ?>
+                </p>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="contact_function"><?php esc_html_e('Fonction', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="contact_function" name="contact_function" class="regular-text"
+                                   value="<?php echo esc_attr($company->contact_function ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="contact_last_name"><?php esc_html_e('Nom', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="contact_last_name" name="contact_last_name" class="regular-text"
+                                   value="<?php echo esc_attr($company->contact_last_name ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="contact_first_name"><?php esc_html_e('Prénom', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="contact_first_name" name="contact_first_name" class="regular-text"
+                                   value="<?php echo esc_attr($company->contact_first_name ?? ''); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -207,7 +266,42 @@ $all_roles = PE_Permissions::get_roles();
                                    min="0" max="365"
                                    value="<?php echo esc_attr($company->payment_terms ?? '30'); ?>" /></td>
                     </tr>
+                    <tr>
+                        <th><label for="payment_method_code"><?php esc_html_e('Code règlement', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="payment_method_code" name="payment_method_code" class="regular-text"
+                                   value="<?php echo esc_attr($company->payment_method_code ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="payment_method_label"><?php esc_html_e('Libellé règlement', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="payment_method_label" name="payment_method_label" class="regular-text"
+                                   placeholder="<?php esc_attr_e('Ex. : Virement à 45 jours fin de mois', 'portail-entreprises'); ?>"
+                                   value="<?php echo esc_attr($company->payment_method_label ?? ''); ?>" /></td>
+                    </tr>
                 </table>
+            </div>
+
+            <!-- Divers -->
+            <div class="pe-form-card">
+                <h2><?php esc_html_e('Divers', 'portail-entreprises'); ?></h2>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="category"><?php esc_html_e('Catégorie', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="category" name="category" class="regular-text"
+                                   placeholder="<?php esc_attr_e('Ex. : Client, Prospect…', 'portail-entreprises'); ?>"
+                                   value="<?php echo esc_attr($company->category ?? ''); ?>" /></td>
+                    </tr>
+                    <tr>
+                        <th><label for="activity"><?php esc_html_e('Activité', 'portail-entreprises'); ?></label></th>
+                        <td><input type="text" id="activity" name="activity" class="regular-text"
+                                   value="<?php echo esc_attr($company->activity ?? ''); ?>" /></td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Commentaires -->
+            <div class="pe-form-card">
+                <h2><?php esc_html_e('Commentaires', 'portail-entreprises'); ?></h2>
+                <textarea name="comments" rows="4" class="large-text"><?php echo esc_textarea($company->comments ?? ''); ?></textarea>
             </div>
 
             <!-- Modules activés -->
@@ -613,6 +707,37 @@ $all_roles = PE_Permissions::get_roles();
         </script>
     </div>
 
+    <!-- Dates dernières pièces -->
+    <div class="pe-form-card" style="margin-top:20px;">
+        <h2><?php esc_html_e('Dates dernières pièces', 'portail-entreprises'); ?></h2>
+        <?php
+        $last_order_date = $manager->get_last_order_date($company_id);
+        $last_quote_date = $manager->get_last_quote_date($company_id);
+        ?>
+        <table class="form-table" style="margin:0;">
+            <tr>
+                <th style="width:200px;"><?php esc_html_e('Dernier devis', 'portail-entreprises'); ?></th>
+                <td>
+                    <?php if ($last_quote_date) : ?>
+                        <?php echo esc_html(date_i18n(get_option('date_format'), strtotime($last_quote_date))); ?>
+                    <?php else : ?>
+                        <em><?php esc_html_e('Aucun devis trouvé.', 'portail-entreprises'); ?></em>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th><?php esc_html_e('Dernière commande', 'portail-entreprises'); ?></th>
+                <td>
+                    <?php if ($last_order_date) : ?>
+                        <?php echo esc_html(date_i18n(get_option('date_format'), strtotime($last_order_date))); ?>
+                    <?php else : ?>
+                        <em><?php esc_html_e('Aucune commande trouvée.', 'portail-entreprises'); ?></em>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        </table>
+    </div>
+
     <!-- Commandes associées -->
     <div class="pe-form-card" style="margin-top:20px;">
         <h2><?php esc_html_e('Commandes associées', 'portail-entreprises'); ?></h2>
@@ -689,18 +814,30 @@ $all_roles = PE_Permissions::get_roles();
         ?>
         <?php
         $audit_field_labels = [
-            'name'             => __('Nom', 'portail-entreprises'),
-            'siret'            => __('SIRET', 'portail-entreprises'),
-            'vat_number'       => __('N° TVA', 'portail-entreprises'),
-            'billing_address'  => __('Adresse de facturation', 'portail-entreprises'),
-            'shipping_address' => __('Adresse de livraison', 'portail-entreprises'),
-            'discount_rate'    => __('Remise', 'portail-entreprises'),
-            'credit_limit'     => __('Limite de crédit', 'portail-entreprises'),
-            'payment_terms'    => __('Délai de paiement', 'portail-entreprises'),
-            'assigned_rep_id'  => __('Commercial', 'portail-entreprises'),
-            'status'           => __('Statut', 'portail-entreprises'),
-            'modules_enabled'  => __('Modules', 'portail-entreprises'),
-            'tdw_profile_slug' => __('Profil TDW', 'portail-entreprises'),
+            'name'                  => __('Nom', 'portail-entreprises'),
+            'customer_code'         => __('Code client', 'portail-entreprises'),
+            'siret'                 => __('SIRET', 'portail-entreprises'),
+            'vat_number'            => __('N° TVA', 'portail-entreprises'),
+            'naf_code'              => __('Code NAF', 'portail-entreprises'),
+            'phone'                 => __('Téléphone société', 'portail-entreprises'),
+            'fax'                   => __('Fax société', 'portail-entreprises'),
+            'contact_function'      => __('Fonction du contact', 'portail-entreprises'),
+            'contact_first_name'    => __('Prénom du contact', 'portail-entreprises'),
+            'contact_last_name'     => __('Nom du contact', 'portail-entreprises'),
+            'payment_method_code'   => __('Code règlement', 'portail-entreprises'),
+            'payment_method_label'  => __('Libellé règlement', 'portail-entreprises'),
+            'category'              => __('Catégorie', 'portail-entreprises'),
+            'activity'              => __('Activité', 'portail-entreprises'),
+            'comments'              => __('Commentaires', 'portail-entreprises'),
+            'billing_address'       => __('Adresse de facturation', 'portail-entreprises'),
+            'shipping_address'      => __('Adresse de livraison', 'portail-entreprises'),
+            'discount_rate'         => __('Remise', 'portail-entreprises'),
+            'credit_limit'          => __('Limite de crédit', 'portail-entreprises'),
+            'payment_terms'         => __('Délai de paiement', 'portail-entreprises'),
+            'assigned_rep_id'       => __('Commercial', 'portail-entreprises'),
+            'status'                => __('Statut', 'portail-entreprises'),
+            'modules_enabled'       => __('Modules', 'portail-entreprises'),
+            'tdw_profile_slug'      => __('Profil TDW', 'portail-entreprises'),
         ];
         $audit_status_labels = [
             'active'    => __('Actif', 'portail-entreprises'),

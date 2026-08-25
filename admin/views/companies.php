@@ -35,7 +35,7 @@ settings_errors('pe_messages');
         <input type="hidden" name="page" value="portail-b2b" />
         <p class="search-box">
             <input type="search" name="s" value="<?php echo esc_attr($search); ?>"
-                   placeholder="<?php esc_attr_e('Rechercher par nom ou SIRET…', 'portail-entreprises'); ?>" />
+                   placeholder="<?php esc_attr_e('Rechercher par nom, SIRET ou code client…', 'portail-entreprises'); ?>" />
             <select name="status_filter">
                 <option value=""><?php esc_html_e('Tous les statuts', 'portail-entreprises'); ?></option>
                 <option value="active" <?php selected($status_flt, 'active'); ?>><?php esc_html_e('Actif', 'portail-entreprises'); ?></option>
@@ -52,6 +52,7 @@ settings_errors('pe_messages');
         <thead>
             <tr>
                 <th class="column-name"><?php esc_html_e('Nom', 'portail-entreprises'); ?></th>
+                <th class="column-customer-code"><?php esc_html_e('Code client', 'portail-entreprises'); ?></th>
                 <th class="column-siret"><?php esc_html_e('SIRET', 'portail-entreprises'); ?></th>
                 <th class="column-users"><?php esc_html_e('Utilisateurs', 'portail-entreprises'); ?></th>
                 <th class="column-status"><?php esc_html_e('Statut', 'portail-entreprises'); ?></th>
@@ -69,6 +70,7 @@ settings_errors('pe_messages');
                         </a>
                     </strong>
                 </td>
+                <td class="column-customer-code"><?php echo esc_html($company->customer_code ?: '—'); ?></td>
                 <td class="column-siret"><?php echo esc_html($company->siret ?: '—'); ?></td>
                 <td class="column-users"><?php echo esc_html($company->user_count ?? 0); ?></td>
                 <td class="column-status">
