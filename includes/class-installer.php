@@ -43,13 +43,25 @@ class PE_Installer {
         $sql_companies = "CREATE TABLE IF NOT EXISTS {$prefix}companies (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name VARCHAR(255) NOT NULL,
+            customer_code VARCHAR(50) NOT NULL DEFAULT '',
             siret VARCHAR(14) NOT NULL DEFAULT '',
             vat_number VARCHAR(20) NOT NULL DEFAULT '',
+            naf_code VARCHAR(10) NOT NULL DEFAULT '',
             billing_address LONGTEXT NULL,
             shipping_address LONGTEXT NULL,
+            phone VARCHAR(30) NOT NULL DEFAULT '',
+            fax VARCHAR(30) NOT NULL DEFAULT '',
+            contact_function VARCHAR(100) NOT NULL DEFAULT '',
+            contact_first_name VARCHAR(100) NOT NULL DEFAULT '',
+            contact_last_name VARCHAR(100) NOT NULL DEFAULT '',
             discount_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             payment_terms INT UNSIGNED NOT NULL DEFAULT 30,
+            payment_method_code VARCHAR(50) NOT NULL DEFAULT '',
+            payment_method_label VARCHAR(255) NOT NULL DEFAULT '',
+            category VARCHAR(100) NOT NULL DEFAULT '',
+            activity VARCHAR(255) NOT NULL DEFAULT '',
+            comments TEXT NULL,
             assigned_rep_id BIGINT UNSIGNED DEFAULT NULL,
             status ENUM('active','suspended') NOT NULL DEFAULT 'active',
             modules_enabled LONGTEXT NULL,
@@ -61,7 +73,8 @@ class PE_Installer {
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY status (status),
-            KEY assigned_rep_id (assigned_rep_id)
+            KEY assigned_rep_id (assigned_rep_id),
+            KEY customer_code (customer_code)
         ) ENGINE=InnoDB {$charset_collate};";
 
         // Table agencies
@@ -244,6 +257,24 @@ class PE_Installer {
         $col_shipping = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'shipping_address'");
         if (!$col_shipping) {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN shipping_address LONGTEXT NULL AFTER billing_address");
+        }
+
+        // Migrate: add "fiche client" columns if missing (v1.6.0)
+        $col_customer_code = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'customer_code'");
+        if (!$col_customer_code) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN customer_code VARCHAR(50) NOT NULL DEFAULT '' AFTER name");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD KEY customer_code (customer_code)");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN naf_code VARCHAR(10) NOT NULL DEFAULT '' AFTER vat_number");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN phone VARCHAR(30) NOT NULL DEFAULT '' AFTER shipping_address");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN fax VARCHAR(30) NOT NULL DEFAULT '' AFTER phone");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN contact_function VARCHAR(100) NOT NULL DEFAULT '' AFTER fax");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN contact_first_name VARCHAR(100) NOT NULL DEFAULT '' AFTER contact_function");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN contact_last_name VARCHAR(100) NOT NULL DEFAULT '' AFTER contact_first_name");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN payment_method_code VARCHAR(50) NOT NULL DEFAULT '' AFTER payment_terms");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN payment_method_label VARCHAR(255) NOT NULL DEFAULT '' AFTER payment_method_code");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN category VARCHAR(100) NOT NULL DEFAULT '' AFTER payment_method_label");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN activity VARCHAR(255) NOT NULL DEFAULT '' AFTER category");
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN comments TEXT NULL AFTER activity");
         }
 
         self::update_db_version();

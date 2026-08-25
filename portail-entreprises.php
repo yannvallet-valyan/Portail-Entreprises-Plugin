@@ -20,7 +20,7 @@ defined('ABSPATH') || exit;
 define('PE_VERSION', '1.6.0');
 define('PE_PATH', plugin_dir_path(__FILE__));
 define('PE_URL', plugin_dir_url(__FILE__));
-define('PE_DB_VERSION', '1.5.0');
+define('PE_DB_VERSION', '1.6.0');
 
 // Declare WooCommerce HPOS compatibility
 add_action('before_woocommerce_init', function () {

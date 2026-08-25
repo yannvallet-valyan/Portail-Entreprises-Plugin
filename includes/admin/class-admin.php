@@ -22,6 +22,7 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
         add_action('wp_ajax_pe_admin_search_users', [$this, 'ajax_admin_search_users']);
+        add_action('wp_ajax_pe_admin_get_customer_prefill', [$this, 'ajax_admin_get_customer_prefill']);
         add_action('wp_ajax_pe_admin_invite_user_to_company', [$this, 'ajax_admin_invite_user_to_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
@@ -137,14 +138,26 @@ class PE_Admin {
         }
 
         $data = [
-            'name'            => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
-            'siret'           => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
-            'vat_number'      => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
-            'discount_rate'   => (float) ($_POST['discount_rate'] ?? 0),
-            'credit_limit'    => (float) ($_POST['credit_limit'] ?? 0),
-            'payment_terms'   => (int) ($_POST['payment_terms'] ?? 30),
-            'status'          => sanitize_key($_POST['status'] ?? 'active'),
-            'modules_enabled' => array_map('sanitize_key', (array) ($_POST['modules_enabled'] ?? [])),
+            'name'                  => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'customer_code'         => sanitize_text_field(wp_unslash($_POST['customer_code'] ?? '')),
+            'siret'                 => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
+            'vat_number'            => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
+            'naf_code'              => sanitize_text_field(wp_unslash($_POST['naf_code'] ?? '')),
+            'phone'                 => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'fax'                   => sanitize_text_field(wp_unslash($_POST['fax'] ?? '')),
+            'contact_function'      => sanitize_text_field(wp_unslash($_POST['contact_function'] ?? '')),
+            'contact_first_name'    => sanitize_text_field(wp_unslash($_POST['contact_first_name'] ?? '')),
+            'contact_last_name'     => sanitize_text_field(wp_unslash($_POST['contact_last_name'] ?? '')),
+            'payment_method_code'   => sanitize_text_field(wp_unslash($_POST['payment_method_code'] ?? '')),
+            'payment_method_label'  => sanitize_text_field(wp_unslash($_POST['payment_method_label'] ?? '')),
+            'category'              => sanitize_text_field(wp_unslash($_POST['category'] ?? '')),
+            'activity'              => sanitize_text_field(wp_unslash($_POST['activity'] ?? '')),
+            'comments'              => sanitize_textarea_field(wp_unslash($_POST['comments'] ?? '')),
+            'discount_rate'         => (float) ($_POST['discount_rate'] ?? 0),
+            'credit_limit'          => (float) ($_POST['credit_limit'] ?? 0),
+            'payment_terms'         => (int) ($_POST['payment_terms'] ?? 30),
+            'status'                => sanitize_key($_POST['status'] ?? 'active'),
+            'modules_enabled'       => array_map('sanitize_key', (array) ($_POST['modules_enabled'] ?? [])),
             'billing_address' => [
                 'address_1' => sanitize_text_field(wp_unslash($_POST['billing_address_1'] ?? '')),
                 'address_2' => sanitize_text_field(wp_unslash($_POST['billing_address_2'] ?? '')),
@@ -193,14 +206,26 @@ class PE_Admin {
         }
 
         $data = [
-            'name'            => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
-            'siret'           => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
-            'vat_number'      => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
-            'discount_rate'   => (float) ($_POST['discount_rate'] ?? 0),
-            'credit_limit'    => (float) ($_POST['credit_limit'] ?? 0),
-            'payment_terms'   => (int) ($_POST['payment_terms'] ?? 30),
-            'status'          => sanitize_key($_POST['status'] ?? 'active'),
-            'modules_enabled' => array_map('sanitize_key', (array) ($_POST['modules_enabled'] ?? [])),
+            'name'                  => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'customer_code'         => sanitize_text_field(wp_unslash($_POST['customer_code'] ?? '')),
+            'siret'                 => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
+            'vat_number'            => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
+            'naf_code'              => sanitize_text_field(wp_unslash($_POST['naf_code'] ?? '')),
+            'phone'                 => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'fax'                   => sanitize_text_field(wp_unslash($_POST['fax'] ?? '')),
+            'contact_function'      => sanitize_text_field(wp_unslash($_POST['contact_function'] ?? '')),
+            'contact_first_name'    => sanitize_text_field(wp_unslash($_POST['contact_first_name'] ?? '')),
+            'contact_last_name'     => sanitize_text_field(wp_unslash($_POST['contact_last_name'] ?? '')),
+            'payment_method_code'   => sanitize_text_field(wp_unslash($_POST['payment_method_code'] ?? '')),
+            'payment_method_label'  => sanitize_text_field(wp_unslash($_POST['payment_method_label'] ?? '')),
+            'category'              => sanitize_text_field(wp_unslash($_POST['category'] ?? '')),
+            'activity'              => sanitize_text_field(wp_unslash($_POST['activity'] ?? '')),
+            'comments'              => sanitize_textarea_field(wp_unslash($_POST['comments'] ?? '')),
+            'discount_rate'         => (float) ($_POST['discount_rate'] ?? 0),
+            'credit_limit'          => (float) ($_POST['credit_limit'] ?? 0),
+            'payment_terms'         => (int) ($_POST['payment_terms'] ?? 30),
+            'status'                => sanitize_key($_POST['status'] ?? 'active'),
+            'modules_enabled'       => array_map('sanitize_key', (array) ($_POST['modules_enabled'] ?? [])),
             'billing_address' => [
                 'address_1' => sanitize_text_field(wp_unslash($_POST['billing_address_1'] ?? '')),
                 'address_2' => sanitize_text_field(wp_unslash($_POST['billing_address_2'] ?? '')),
@@ -738,6 +763,120 @@ class PE_Admin {
         ], $users);
 
         wp_send_json_success(['users' => array_values($results)]);
+    }
+
+    /**
+     * Renvoie les coordonnées connues d'un client existant (utilisateur WordPress/WooCommerce)
+     * afin de pré-remplir le contact et les adresses d'une société — utilisé lorsqu'on
+     * rattache un client déjà connu au lieu de ressaisir ses informations.
+     *
+     * Si ce client est déjà membre d'une autre société (sa « fiche client »), les
+     * informations propres à cette société (SIRET, TVA, code NAF, code client,
+     * règlement, remise…) sont également renvoyées et priment sur celles de son
+     * compte WooCommerce, plus complètes et déjà validées pour la facturation.
+     */
+    public function ajax_admin_get_customer_prefill(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $user_id             = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $exclude_company_id  = isset($_POST['exclude_company_id']) ? absint($_POST['exclude_company_id']) : 0;
+        $user                = $user_id ? get_userdata($user_id) : null;
+
+        if (!$user) {
+            wp_send_json_error(['message' => __('Utilisateur introuvable.', 'portail-entreprises')]);
+        }
+
+        $billing_address  = ['address_1' => '', 'address_2' => '', 'city' => '', 'postcode' => '', 'country' => ''];
+        $shipping_address = $billing_address;
+        $phone            = '';
+        $fax              = '';
+        $company_name     = '';
+
+        if (class_exists('WC_Customer')) {
+            $customer = new \WC_Customer($user_id);
+
+            $billing_address = [
+                'address_1' => $customer->get_billing_address_1(),
+                'address_2' => $customer->get_billing_address_2(),
+                'city'      => $customer->get_billing_city(),
+                'postcode'  => $customer->get_billing_postcode(),
+                'country'   => $customer->get_billing_country(),
+            ];
+            $shipping_address = [
+                'address_1' => $customer->get_shipping_address_1(),
+                'address_2' => $customer->get_shipping_address_2(),
+                'city'      => $customer->get_shipping_city(),
+                'postcode'  => $customer->get_shipping_postcode(),
+                'country'   => $customer->get_shipping_country(),
+            ];
+            $phone        = $customer->get_billing_phone();
+            $company_name = $customer->get_billing_company();
+        }
+
+        $siret                = '';
+        $vat_number            = '';
+        $naf_code              = '';
+        $customer_code         = '';
+        $category              = '';
+        $activity              = '';
+        $payment_terms         = null;
+        $payment_method_code   = '';
+        $payment_method_label  = '';
+        $discount_rate         = null;
+        $credit_limit          = null;
+
+        $existing_company = PE_Permissions::get_user_company($user_id);
+
+        if ($existing_company && (int) $existing_company->id !== $exclude_company_id) {
+            $company_name         = $existing_company->name ?: $company_name;
+            $siret                = $existing_company->siret;
+            $vat_number            = $existing_company->vat_number;
+            $naf_code              = $existing_company->naf_code;
+            $customer_code         = $existing_company->customer_code;
+            $category              = $existing_company->category;
+            $activity              = $existing_company->activity;
+            $payment_terms         = $existing_company->payment_terms;
+            $payment_method_code   = $existing_company->payment_method_code;
+            $payment_method_label  = $existing_company->payment_method_label;
+            $discount_rate         = $existing_company->discount_rate;
+            $credit_limit          = $existing_company->credit_limit;
+            $phone                 = $existing_company->phone ?: $phone;
+            $fax                   = $existing_company->fax ?: $fax;
+
+            $existing_billing  = array_filter((array) json_decode($existing_company->billing_address ?? '', true));
+            $existing_shipping = array_filter((array) json_decode($existing_company->shipping_address ?? '', true));
+            if ($existing_billing) {
+                $billing_address = array_merge($billing_address, $existing_billing);
+            }
+            if ($existing_shipping) {
+                $shipping_address = array_merge($shipping_address, $existing_shipping);
+            }
+        }
+
+        wp_send_json_success([
+            'first_name'            => $user->first_name,
+            'last_name'             => $user->last_name,
+            'phone'                 => $phone,
+            'fax'                   => $fax,
+            'company_name'          => $company_name,
+            'siret'                 => $siret,
+            'vat_number'            => $vat_number,
+            'naf_code'              => $naf_code,
+            'customer_code'         => $customer_code,
+            'category'              => $category,
+            'activity'              => $activity,
+            'payment_terms'         => $payment_terms,
+            'payment_method_code'   => $payment_method_code,
+            'payment_method_label'  => $payment_method_label,
+            'discount_rate'         => $discount_rate,
+            'credit_limit'          => $credit_limit,
+            'billing_address'       => $billing_address,
+            'shipping_address'      => $shipping_address,
+        ]);
     }
 
     public function ajax_admin_invite_user_to_company(): void {
