@@ -22,6 +22,8 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
         add_action('wp_ajax_pe_admin_search_users', [$this, 'ajax_admin_search_users']);
+        add_action('wp_ajax_pe_admin_search_companies', [$this, 'ajax_admin_search_companies']);
+        add_action('wp_ajax_pe_admin_get_company_prefill', [$this, 'ajax_admin_get_company_prefill']);
         add_action('wp_ajax_pe_admin_invite_user_to_company', [$this, 'ajax_admin_invite_user_to_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
@@ -762,6 +764,77 @@ class PE_Admin {
         ], $users);
 
         wp_send_json_success(['users' => array_values($results)]);
+    }
+
+    /**
+     * Recherche de sociétés existantes (rattachement d'une nouvelle entité à un client connu).
+     */
+    public function ajax_admin_search_companies(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
+
+        if (strlen($search) < 2) {
+            wp_send_json_success(['companies' => []]);
+        }
+
+        $companies = PE_Company_Manager::get_instance()->search_companies_for_autofill($search, 10);
+
+        $results = array_map(function ($c) {
+            $label = $c->name;
+            if ($c->customer_code) {
+                $label .= ' (' . $c->customer_code . ')';
+            }
+            if ($c->siret) {
+                $label .= ' — ' . $c->siret;
+            }
+            return [
+                'id'    => (int) $c->id,
+                'label' => $label,
+            ];
+        }, $companies);
+
+        wp_send_json_success(['companies' => array_values($results)]);
+    }
+
+    /**
+     * Renvoie les coordonnées d'une société existante afin de pré-remplir la fiche
+     * d'une nouvelle entité rattachée au même client (adresses, contact, règlement…).
+     */
+    public function ajax_admin_get_company_prefill(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+        $company    = $company_id ? PE_Company_Manager::get_instance()->get_company($company_id) : null;
+
+        if (!$company) {
+            wp_send_json_error(['message' => __('Société introuvable.', 'portail-entreprises')]);
+        }
+
+        wp_send_json_success([
+            'billing_address'      => (object) (array) json_decode($company->billing_address ?? '', true),
+            'shipping_address'     => (object) (array) json_decode($company->shipping_address ?? '', true),
+            'phone'                => $company->phone,
+            'fax'                  => $company->fax,
+            'contact_function'     => $company->contact_function,
+            'contact_first_name'   => $company->contact_first_name,
+            'contact_last_name'    => $company->contact_last_name,
+            'payment_terms'        => $company->payment_terms,
+            'payment_method_code'  => $company->payment_method_code,
+            'payment_method_label' => $company->payment_method_label,
+            'discount_rate'        => $company->discount_rate,
+            'credit_limit'         => $company->credit_limit,
+            'category'             => $company->category,
+            'activity'             => $company->activity,
+        ]);
     }
 
     public function ajax_admin_invite_user_to_company(): void {

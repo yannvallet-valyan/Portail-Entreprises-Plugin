@@ -54,6 +54,100 @@ $all_roles = PE_Permissions::get_roles();
         &larr; <?php esc_html_e('Retour à la liste', 'portail-entreprises'); ?>
     </a>
 
+    <?php if ($is_new) : ?>
+    <div class="pe-form-card" style="margin-top:20px;">
+        <h2><?php esc_html_e('Rattacher à un client existant', 'portail-entreprises'); ?></h2>
+        <p class="description" style="margin-top:-6px;">
+            <?php esc_html_e('Si ce client possède déjà une autre société, recherchez-le pour pré-remplir automatiquement ses coordonnées (adresses de facturation/livraison, contact, règlement…).', 'portail-entreprises'); ?>
+        </p>
+        <div style="position:relative; max-width:420px;">
+            <input type="text" id="pe-company-search-input" class="regular-text" style="width:100%;"
+                   placeholder="<?php esc_attr_e('Nom, code client ou SIRET…', 'portail-entreprises'); ?>" autocomplete="off" />
+            <div id="pe-company-search-results"
+                 style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; max-height:220px; overflow-y:auto; z-index:200; box-shadow:0 2px 6px rgba(0,0,0,.15);"></div>
+        </div>
+        <p id="pe-company-search-msg" style="margin-top:8px; font-weight:600;"></p>
+    </div>
+
+    <script>
+    jQuery(function($) {
+        var searchTimer;
+        var ajaxNonce = '<?php echo esc_js(wp_create_nonce('pe_b2b_ajax')); ?>';
+
+        function setIfPresent(id, val) {
+            if (val !== undefined && val !== null && val !== '') {
+                $('#' + id).val(val);
+            }
+        }
+
+        $('#pe-company-search-input').on('keyup', function() {
+            clearTimeout(searchTimer);
+            var q = $(this).val().trim();
+            if (q.length < 2) { $('#pe-company-search-results').hide().empty(); return; }
+            searchTimer = setTimeout(function() {
+                $.post(ajaxurl, { action: 'pe_admin_search_companies', nonce: ajaxNonce, search: q }, function(res) {
+                    var $list = $('#pe-company-search-results').empty();
+                    if (res.success && res.data.companies.length) {
+                        $.each(res.data.companies, function(i, c) {
+                            $('<div>').text(c.label)
+                                .css({ padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' })
+                                .on('mouseenter', function() { $(this).css('background', '#f0f6ff'); })
+                                .on('mouseleave', function() { $(this).css('background', ''); })
+                                .on('click', function() {
+                                    $('#pe-company-search-input').val(c.label);
+                                    $list.hide().empty();
+                                    $('#pe-company-search-msg').css('color', '#666').text('<?php echo esc_js(__('Chargement des informations…', 'portail-entreprises')); ?>');
+
+                                    $.post(ajaxurl, { action: 'pe_admin_get_company_prefill', nonce: ajaxNonce, company_id: c.id }, function(res2) {
+                                        if (res2.success) {
+                                            var d = res2.data;
+                                            setIfPresent('billing_address_1', d.billing_address.address_1);
+                                            setIfPresent('billing_address_2', d.billing_address.address_2);
+                                            setIfPresent('billing_city', d.billing_address.city);
+                                            setIfPresent('billing_postcode', d.billing_address.postcode);
+                                            setIfPresent('billing_country', d.billing_address.country);
+                                            setIfPresent('shipping_address_1', d.shipping_address.address_1);
+                                            setIfPresent('shipping_address_2', d.shipping_address.address_2);
+                                            setIfPresent('shipping_city', d.shipping_address.city);
+                                            setIfPresent('shipping_postcode', d.shipping_address.postcode);
+                                            setIfPresent('shipping_country', d.shipping_address.country);
+                                            setIfPresent('phone', d.phone);
+                                            setIfPresent('fax', d.fax);
+                                            setIfPresent('contact_function', d.contact_function);
+                                            setIfPresent('contact_first_name', d.contact_first_name);
+                                            setIfPresent('contact_last_name', d.contact_last_name);
+                                            setIfPresent('payment_method_code', d.payment_method_code);
+                                            setIfPresent('payment_method_label', d.payment_method_label);
+                                            setIfPresent('category', d.category);
+                                            setIfPresent('activity', d.activity);
+                                            setIfPresent('payment_terms', d.payment_terms);
+                                            setIfPresent('discount_rate', d.discount_rate);
+                                            setIfPresent('credit_limit', d.credit_limit);
+                                            $('#pe-company-search-msg').css('color', '#28a745')
+                                                .text('<?php echo esc_js(__('Coordonnées pré-remplies. Vérifiez-les avant d\'enregistrer.', 'portail-entreprises')); ?>');
+                                        } else {
+                                            $('#pe-company-search-msg').css('color', '#b32d2e').text(res2.data.message);
+                                        }
+                                    });
+                                }).appendTo($list);
+                        });
+                        $list.show();
+                    } else {
+                        $list.append($('<div>').text('<?php echo esc_js(__('Aucun résultat.', 'portail-entreprises')); ?>').css({ padding: '7px 12px', color: '#888' })).show();
+                    }
+                });
+            }, 300);
+        });
+
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#pe-company-search-input, #pe-company-search-results').length) {
+                $('#pe-company-search-results').hide();
+            }
+        });
+    });
+    </script>
+    <?php endif; ?>
+
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="pe-company-form">
         <?php wp_nonce_field($nonce_action, '_wpnonce'); ?>
         <input type="hidden" name="action" value="<?php echo esc_attr($form_action); ?>" />

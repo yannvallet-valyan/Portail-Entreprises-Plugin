@@ -925,6 +925,30 @@ class PE_Company_Manager {
     }
 
     /**
+     * Recherche des sociétés existantes pour la pré-saisie d'une nouvelle fiche client
+     * (rattachement d'une nouvelle entité à un client déjà connu).
+     */
+    public function search_companies_for_autofill(string $search, int $limit = 10): array {
+        global $wpdb;
+
+        $like = '%' . $wpdb->esc_like($search) . '%';
+
+        return $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, name, customer_code, siret
+                 FROM {$wpdb->prefix}b2b_companies
+                 WHERE name LIKE %s OR customer_code LIKE %s OR siret LIKE %s
+                 ORDER BY name ASC
+                 LIMIT %d",
+                $like,
+                $like,
+                $like,
+                $limit
+            )
+        ) ?: [];
+    }
+
+    /**
      * Date de la dernière commande de la société (au format Y-m-d H:i:s), ou null si aucune.
      */
     public function get_last_order_date(int $company_id): ?string {
