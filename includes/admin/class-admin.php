@@ -769,6 +769,11 @@ class PE_Admin {
      * Renvoie les coordonnées connues d'un client existant (utilisateur WordPress/WooCommerce)
      * afin de pré-remplir le contact et les adresses d'une société — utilisé lorsqu'on
      * rattache un client déjà connu au lieu de ressaisir ses informations.
+     *
+     * Si ce client est déjà membre d'une autre société (sa « fiche client »), les
+     * informations propres à cette société (SIRET, TVA, code NAF, code client,
+     * règlement, remise…) sont également renvoyées et priment sur celles de son
+     * compte WooCommerce, plus complètes et déjà validées pour la facturation.
      */
     public function ajax_admin_get_customer_prefill(): void {
         check_ajax_referer('pe_b2b_ajax', 'nonce');
@@ -777,8 +782,9 @@ class PE_Admin {
             wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
         }
 
-        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
-        $user    = $user_id ? get_userdata($user_id) : null;
+        $user_id             = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $exclude_company_id  = isset($_POST['exclude_company_id']) ? absint($_POST['exclude_company_id']) : 0;
+        $user                = $user_id ? get_userdata($user_id) : null;
 
         if (!$user) {
             wp_send_json_error(['message' => __('Utilisateur introuvable.', 'portail-entreprises')]);
@@ -787,6 +793,7 @@ class PE_Admin {
         $billing_address  = ['address_1' => '', 'address_2' => '', 'city' => '', 'postcode' => '', 'country' => ''];
         $shipping_address = $billing_address;
         $phone            = '';
+        $fax              = '';
         $company_name     = '';
 
         if (class_exists('WC_Customer')) {
@@ -810,13 +817,65 @@ class PE_Admin {
             $company_name = $customer->get_billing_company();
         }
 
+        $siret                = '';
+        $vat_number            = '';
+        $naf_code              = '';
+        $customer_code         = '';
+        $category              = '';
+        $activity              = '';
+        $payment_terms         = null;
+        $payment_method_code   = '';
+        $payment_method_label  = '';
+        $discount_rate         = null;
+        $credit_limit          = null;
+
+        $existing_company = PE_Permissions::get_user_company($user_id);
+
+        if ($existing_company && (int) $existing_company->id !== $exclude_company_id) {
+            $company_name         = $existing_company->name ?: $company_name;
+            $siret                = $existing_company->siret;
+            $vat_number            = $existing_company->vat_number;
+            $naf_code              = $existing_company->naf_code;
+            $customer_code         = $existing_company->customer_code;
+            $category              = $existing_company->category;
+            $activity              = $existing_company->activity;
+            $payment_terms         = $existing_company->payment_terms;
+            $payment_method_code   = $existing_company->payment_method_code;
+            $payment_method_label  = $existing_company->payment_method_label;
+            $discount_rate         = $existing_company->discount_rate;
+            $credit_limit          = $existing_company->credit_limit;
+            $phone                 = $existing_company->phone ?: $phone;
+            $fax                   = $existing_company->fax ?: $fax;
+
+            $existing_billing  = array_filter((array) json_decode($existing_company->billing_address ?? '', true));
+            $existing_shipping = array_filter((array) json_decode($existing_company->shipping_address ?? '', true));
+            if ($existing_billing) {
+                $billing_address = array_merge($billing_address, $existing_billing);
+            }
+            if ($existing_shipping) {
+                $shipping_address = array_merge($shipping_address, $existing_shipping);
+            }
+        }
+
         wp_send_json_success([
-            'first_name'       => $user->first_name,
-            'last_name'        => $user->last_name,
-            'phone'            => $phone,
-            'company_name'     => $company_name,
-            'billing_address'  => $billing_address,
-            'shipping_address' => $shipping_address,
+            'first_name'            => $user->first_name,
+            'last_name'             => $user->last_name,
+            'phone'                 => $phone,
+            'fax'                   => $fax,
+            'company_name'          => $company_name,
+            'siret'                 => $siret,
+            'vat_number'            => $vat_number,
+            'naf_code'              => $naf_code,
+            'customer_code'         => $customer_code,
+            'category'              => $category,
+            'activity'              => $activity,
+            'payment_terms'         => $payment_terms,
+            'payment_method_code'   => $payment_method_code,
+            'payment_method_label'  => $payment_method_label,
+            'discount_rate'         => $discount_rate,
+            'credit_limit'          => $credit_limit,
+            'billing_address'       => $billing_address,
+            'shipping_address'      => $shipping_address,
         ]);
     }
 
