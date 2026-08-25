@@ -52,7 +52,6 @@ settings_errors('pe_messages');
         <thead>
             <tr>
                 <th class="column-name"><?php esc_html_e('Nom', 'portail-entreprises'); ?></th>
-                <th class="column-client"><?php esc_html_e('Client', 'portail-entreprises'); ?></th>
                 <th class="column-customer-code"><?php esc_html_e('Code client', 'portail-entreprises'); ?></th>
                 <th class="column-siret"><?php esc_html_e('SIRET', 'portail-entreprises'); ?></th>
                 <th class="column-users"><?php esc_html_e('Utilisateurs', 'portail-entreprises'); ?></th>
@@ -71,7 +70,6 @@ settings_errors('pe_messages');
                         </a>
                     </strong>
                 </td>
-                <td class="column-client"><?php echo esc_html($company->client_name ?: '—'); ?></td>
                 <td class="column-customer-code"><?php echo esc_html($company->customer_code ?: '—'); ?></td>
                 <td class="column-siret"><?php echo esc_html($company->siret ?: '—'); ?></td>
                 <td class="column-users"><?php echo esc_html($company->user_count ?? 0); ?></td>

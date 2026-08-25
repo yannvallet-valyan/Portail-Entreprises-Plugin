@@ -5,43 +5,17 @@
 
 defined('ABSPATH') || exit;
 
-$manager        = PE_Company_Manager::get_instance();
-$client_manager = PE_Client_Manager::get_instance();
-$company_id     = isset($_GET['company_id']) ? absint($_GET['company_id']) : 0;
-$is_new         = 0 === $company_id;
-$company        = $is_new ? null : $manager->get_company($company_id);
+$manager    = PE_Company_Manager::get_instance();
+$company_id = isset($_GET['company_id']) ? absint($_GET['company_id']) : 0;
+$is_new     = 0 === $company_id;
+$company    = $is_new ? null : $manager->get_company($company_id);
 
 if (!$is_new && !$company) {
     wp_die(esc_html__('Société introuvable.', 'portail-entreprises'));
 }
 
-// Client déjà rattaché à la société, ou présélectionné via ?client_id= (lien
-// « + Nouvelle société » depuis la fiche client).
-$linked_client_id    = ($company && !empty($company->client_id)) ? (int) $company->client_id : 0;
-$preselect_client_id = $is_new ? absint($_GET['client_id'] ?? 0) : $linked_client_id;
-$current_client       = $preselect_client_id ? $client_manager->get_client($preselect_client_id) : null;
-
-/**
- * Valeur d'un champ partagé avec le client : celle de la société si elle existe déjà,
- * sinon celle du client sélectionné — uniquement à la création, pour ne jamais
- * écraser les données déjà saisies d'une société existante.
- */
-$field_value = function (string $field, $default = '') use ($company, $is_new, $current_client) {
-    if ($company && isset($company->$field)) {
-        return $company->$field;
-    }
-    if ($is_new && $current_client && isset($current_client->$field)) {
-        return $current_client->$field;
-    }
-    return $default;
-};
-
-$billing_address  = $company
-    ? (array) json_decode($company->billing_address, true)
-    : ($current_client ? (array) json_decode($current_client->billing_address ?? '', true) : []);
-$shipping_address = $company
-    ? (array) json_decode($company->shipping_address ?? '', true)
-    : ($current_client ? (array) json_decode($current_client->shipping_address ?? '', true) : []);
+$billing_address  = $company ? (array) json_decode($company->billing_address, true) : [];
+$shipping_address = $company ? (array) json_decode($company->shipping_address ?? '', true) : [];
 $modules_enabled  = $company ? (array) json_decode($company->modules_enabled, true) : [];
 $company_users    = $is_new ? [] : $manager->get_company_users($company_id);
 $approval_rules   = $is_new ? [] : $manager->get_approval_rules($company_id);
@@ -80,171 +54,9 @@ $all_roles = PE_Permissions::get_roles();
         &larr; <?php esc_html_e('Retour à la liste', 'portail-entreprises'); ?>
     </a>
 
-    <div class="pe-form-card" style="margin-top:20px;">
-        <h2><?php esc_html_e('Client', 'portail-entreprises'); ?></h2>
-
-        <div id="pe-client-current" style="<?php echo $current_client ? '' : 'display:none;'; ?> margin-bottom:4px;">
-            <p style="margin:0;">
-                <?php esc_html_e('Client rattaché :', 'portail-entreprises'); ?>
-                <strong id="pe-client-current-label">
-                    <?php if ($current_client) : ?>
-                        <?php echo esc_html($current_client->name); ?><?php echo $current_client->customer_code ? ' (' . esc_html($current_client->customer_code) . ')' : ''; ?>
-                    <?php endif; ?>
-                </strong>
-                <button type="button" id="pe-client-change-btn" class="button button-small" style="margin-left:8px;">
-                    <?php esc_html_e('Changer', 'portail-entreprises'); ?>
-                </button>
-                <a href="#" id="pe-client-unlink" style="margin-left:8px;color:#b32d2e;">
-                    <?php esc_html_e('Dissocier', 'portail-entreprises'); ?>
-                </a>
-            </p>
-        </div>
-
-        <div id="pe-client-search-wrap" style="<?php echo $current_client ? 'display:none;' : ''; ?> max-width:420px;">
-            <p class="description" style="margin-top:0;">
-                <?php esc_html_e('Recherchez un client déjà créé — même s\'il n\'a pas encore de société — pour rattacher cette société et pré-remplir ses coordonnées (adresses, contact, règlement…). Si le client n\'existe pas encore, vous pouvez le créer directement ici.', 'portail-entreprises'); ?>
-            </p>
-            <div style="position:relative;">
-                <input type="text" id="pe-client-search-input" class="regular-text" style="width:100%;"
-                       placeholder="<?php esc_attr_e('Nom ou code client…', 'portail-entreprises'); ?>" autocomplete="off" />
-                <div id="pe-client-search-results"
-                     style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; max-height:260px; overflow-y:auto; z-index:200; box-shadow:0 2px 6px rgba(0,0,0,.15);"></div>
-            </div>
-            <p id="pe-client-search-msg" style="margin-top:8px; font-weight:600;"></p>
-        </div>
-    </div>
-
-    <script>
-    jQuery(function($) {
-        var searchTimer;
-        var ajaxNonce = '<?php echo esc_js(wp_create_nonce('pe_b2b_ajax')); ?>';
-
-        function setIfPresent(id, val) {
-            if (val !== undefined && val !== null && val !== '') {
-                $('#' + id).val(val);
-            }
-        }
-
-        function selectClient(id, label) {
-            $('#client_id').val(id);
-            $('#pe-client-current-label').text(label);
-            $('#pe-client-current').show();
-            $('#pe-client-search-wrap').hide();
-            $('#pe-client-search-input').val('');
-            $('#pe-client-search-results').hide().empty();
-        }
-
-        function applyPrefill(clientId) {
-            $('#pe-client-search-msg').css('color', '#666').text('<?php echo esc_js(__('Chargement des informations…', 'portail-entreprises')); ?>');
-            $.post(ajaxurl, { action: 'pe_admin_get_client_prefill', nonce: ajaxNonce, client_id: clientId }, function(res2) {
-                if (res2.success) {
-                    var d = res2.data;
-                    setIfPresent('customer_code', d.customer_code);
-                    setIfPresent('billing_address_1', d.billing_address.address_1);
-                    setIfPresent('billing_address_2', d.billing_address.address_2);
-                    setIfPresent('billing_city', d.billing_address.city);
-                    setIfPresent('billing_postcode', d.billing_address.postcode);
-                    setIfPresent('billing_country', d.billing_address.country);
-                    setIfPresent('shipping_address_1', d.shipping_address.address_1);
-                    setIfPresent('shipping_address_2', d.shipping_address.address_2);
-                    setIfPresent('shipping_city', d.shipping_address.city);
-                    setIfPresent('shipping_postcode', d.shipping_address.postcode);
-                    setIfPresent('shipping_country', d.shipping_address.country);
-                    setIfPresent('phone', d.phone);
-                    setIfPresent('fax', d.fax);
-                    setIfPresent('contact_function', d.contact_function);
-                    setIfPresent('contact_first_name', d.contact_first_name);
-                    setIfPresent('contact_last_name', d.contact_last_name);
-                    setIfPresent('payment_method_code', d.payment_method_code);
-                    setIfPresent('payment_method_label', d.payment_method_label);
-                    setIfPresent('category', d.category);
-                    setIfPresent('activity', d.activity);
-                    setIfPresent('payment_terms', d.payment_terms);
-                    setIfPresent('discount_rate', d.discount_rate);
-                    setIfPresent('credit_limit', d.credit_limit);
-                    $('#pe-client-search-msg').css('color', '#28a745')
-                        .text('<?php echo esc_js(__('Coordonnées pré-remplies. Vérifiez-les avant d\'enregistrer.', 'portail-entreprises')); ?>');
-                } else {
-                    $('#pe-client-search-msg').css('color', '#b32d2e').text(res2.data.message);
-                }
-            });
-        }
-
-        $('#pe-client-search-input').on('keyup', function() {
-            clearTimeout(searchTimer);
-            var q = $(this).val().trim();
-            if (q.length < 2) { $('#pe-client-search-results').hide().empty(); return; }
-            searchTimer = setTimeout(function() {
-                $.post(ajaxurl, { action: 'pe_admin_search_clients', nonce: ajaxNonce, search: q }, function(res) {
-                    var $list = $('#pe-client-search-results').empty();
-                    if (res.success && res.data.clients.length) {
-                        $.each(res.data.clients, function(i, c) {
-                            $('<div>').text(c.label)
-                                .css({ padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' })
-                                .on('mouseenter', function() { $(this).css('background', '#f0f6ff'); })
-                                .on('mouseleave', function() { $(this).css('background', ''); })
-                                .on('click', function() {
-                                    selectClient(c.id, c.label);
-                                    applyPrefill(c.id);
-                                }).appendTo($list);
-                        });
-                    } else {
-                        $('<div>').css({ padding: '7px 12px', color: '#888' })
-                            .text('<?php echo esc_js(__('Aucun résultat.', 'portail-entreprises')); ?>')
-                            .appendTo($list);
-                    }
-
-                    var $create = $('<div>')
-                        .css({ padding: '7px 12px', cursor: 'pointer', color: '#2271b1', fontWeight: '600', borderTop: '1px solid #f0f0f0' })
-                        .text('<?php echo esc_js(__('+ Créer le client « ', 'portail-entreprises')); ?>' + q + '<?php echo esc_js(__(' »', 'portail-entreprises')); ?>')
-                        .on('mouseenter', function() { $(this).css('background', '#f0f6ff'); })
-                        .on('mouseleave', function() { $(this).css('background', ''); })
-                        .on('click', function() {
-                            $list.hide().empty();
-                            $('#pe-client-search-msg').css('color', '#666').text('<?php echo esc_js(__('Création du client…', 'portail-entreprises')); ?>');
-                            $.post(ajaxurl, { action: 'pe_admin_quick_create_client', nonce: ajaxNonce, name: q }, function(res3) {
-                                if (res3.success) {
-                                    selectClient(res3.data.id, res3.data.label);
-                                    $('#pe-client-search-msg').css('color', '#28a745')
-                                        .text('<?php echo esc_js(__('Client créé et rattaché. Vous pouvez compléter ses coordonnées depuis la page Clients.', 'portail-entreprises')); ?>');
-                                } else {
-                                    $('#pe-client-search-msg').css('color', '#b32d2e').text(res3.data.message);
-                                }
-                            });
-                        })
-                        .appendTo($list);
-
-                    $list.show();
-                });
-            }, 300);
-        });
-
-        $('#pe-client-change-btn').on('click', function() {
-            $('#pe-client-current').hide();
-            $('#pe-client-search-wrap').show();
-            $('#pe-client-search-msg').text('');
-        });
-
-        $('#pe-client-unlink').on('click', function(e) {
-            e.preventDefault();
-            $('#client_id').val('');
-            $('#pe-client-current').hide();
-            $('#pe-client-search-wrap').show();
-            $('#pe-client-search-msg').text('');
-        });
-
-        $(document).on('click', function(e) {
-            if (!$(e.target).closest('#pe-client-search-input, #pe-client-search-results').length) {
-                $('#pe-client-search-results').hide();
-            }
-        });
-    });
-    </script>
-
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="pe-company-form">
         <?php wp_nonce_field($nonce_action, '_wpnonce'); ?>
         <input type="hidden" name="action" value="<?php echo esc_attr($form_action); ?>" />
-        <input type="hidden" name="client_id" id="client_id" value="<?php echo esc_attr((string) ($current_client->id ?? '')); ?>" />
         <?php if (!$is_new) : ?>
         <input type="hidden" name="company_id" value="<?php echo esc_attr($company_id); ?>" />
         <?php endif; ?>
@@ -258,17 +70,17 @@ $all_roles = PE_Permissions::get_roles();
                         <th><label for="customer_code"><?php esc_html_e('Code client', 'portail-entreprises'); ?></label></th>
                         <td>
                             <input type="text" id="customer_code" name="customer_code" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('customer_code')); ?>" />
+                                   value="<?php echo esc_attr($company->customer_code ?? ''); ?>" />
                             <p class="description">
                                 <?php esc_html_e('Identifiant interne permettant de distinguer cette société lorsqu\'un même client possède plusieurs entreprises.', 'portail-entreprises'); ?>
                             </p>
                         </td>
                     </tr>
                     <tr>
-                        <th><label for="company_name"><?php esc_html_e('Nom de la société *', 'portail-entreprises'); ?></label></th>
+                        <th><label for="company_name"><?php esc_html_e('Libellé client (nom de la société) *', 'portail-entreprises'); ?></label></th>
                         <td>
                             <input type="text" id="company_name" name="company_name" class="regular-text" required
-                                   value="<?php echo esc_attr($field_value('name')); ?>" />
+                                   value="<?php echo esc_attr($company->name ?? ''); ?>" />
                         </td>
                     </tr>
                     <tr>
@@ -311,12 +123,12 @@ $all_roles = PE_Permissions::get_roles();
                     <tr>
                         <th><label for="phone"><?php esc_html_e('Téléphone société', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="phone" name="phone" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('phone')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->phone ?? ''); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="fax"><?php esc_html_e('Fax société', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="fax" name="fax" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('fax')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->fax ?? ''); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -331,17 +143,17 @@ $all_roles = PE_Permissions::get_roles();
                     <tr>
                         <th><label for="contact_function"><?php esc_html_e('Fonction', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="contact_function" name="contact_function" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('contact_function')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->contact_function ?? ''); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="contact_last_name"><?php esc_html_e('Nom', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="contact_last_name" name="contact_last_name" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('contact_last_name')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->contact_last_name ?? ''); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="contact_first_name"><?php esc_html_e('Prénom', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="contact_first_name" name="contact_first_name" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('contact_first_name')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->contact_first_name ?? ''); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -421,7 +233,7 @@ $all_roles = PE_Permissions::get_roles();
                         <th><label for="discount_rate"><?php esc_html_e('Taux de remise (%)', 'portail-entreprises'); ?></label></th>
                         <td><input type="number" id="discount_rate" name="discount_rate" class="small-text"
                                    min="0" max="100" step="0.01"
-                                   value="<?php echo esc_attr($field_value('discount_rate', 0)); ?>" /></td>
+                                   value="<?php echo esc_attr($company->discount_rate ?? '0'); ?>" /></td>
                     </tr>
                     <?php if (class_exists('TDW_B2B_Taxonomies')) :
                         $tdw_profiles        = TDW_B2B_Taxonomies::get_profiles();
@@ -446,24 +258,24 @@ $all_roles = PE_Permissions::get_roles();
                         <th><label for="credit_limit"><?php esc_html_e('Plafond de crédit (€)', 'portail-entreprises'); ?></label></th>
                         <td><input type="number" id="credit_limit" name="credit_limit" class="regular-text"
                                    min="0" step="0.01"
-                                   value="<?php echo esc_attr($field_value('credit_limit', 0)); ?>" /></td>
+                                   value="<?php echo esc_attr($company->credit_limit ?? '0'); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="payment_terms"><?php esc_html_e('Délai de paiement (jours)', 'portail-entreprises'); ?></label></th>
                         <td><input type="number" id="payment_terms" name="payment_terms" class="small-text"
                                    min="0" max="365"
-                                   value="<?php echo esc_attr($field_value('payment_terms', 30)); ?>" /></td>
+                                   value="<?php echo esc_attr($company->payment_terms ?? '30'); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="payment_method_code"><?php esc_html_e('Code règlement', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="payment_method_code" name="payment_method_code" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('payment_method_code')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->payment_method_code ?? ''); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="payment_method_label"><?php esc_html_e('Libellé règlement', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="payment_method_label" name="payment_method_label" class="regular-text"
                                    placeholder="<?php esc_attr_e('Ex. : Virement à 45 jours fin de mois', 'portail-entreprises'); ?>"
-                                   value="<?php echo esc_attr($field_value('payment_method_label')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->payment_method_label ?? ''); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -476,12 +288,12 @@ $all_roles = PE_Permissions::get_roles();
                         <th><label for="category"><?php esc_html_e('Catégorie', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="category" name="category" class="regular-text"
                                    placeholder="<?php esc_attr_e('Ex. : Client, Prospect…', 'portail-entreprises'); ?>"
-                                   value="<?php echo esc_attr($field_value('category')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->category ?? ''); ?>" /></td>
                     </tr>
                     <tr>
                         <th><label for="activity"><?php esc_html_e('Activité', 'portail-entreprises'); ?></label></th>
                         <td><input type="text" id="activity" name="activity" class="regular-text"
-                                   value="<?php echo esc_attr($field_value('activity')); ?>" /></td>
+                                   value="<?php echo esc_attr($company->activity ?? ''); ?>" /></td>
                     </tr>
                 </table>
             </div>
@@ -1003,7 +815,6 @@ $all_roles = PE_Permissions::get_roles();
         <?php
         $audit_field_labels = [
             'name'                  => __('Nom', 'portail-entreprises'),
-            'client_id'             => __('Client', 'portail-entreprises'),
             'customer_code'         => __('Code client', 'portail-entreprises'),
             'siret'                 => __('SIRET', 'portail-entreprises'),
             'vat_number'            => __('N° TVA', 'portail-entreprises'),
@@ -1109,19 +920,6 @@ $all_roles = PE_Permissions::get_roles();
                                 $details[] = $label . ' : ' . $fmt_rep($from) . ' → ' . $fmt_rep($to);
                             } else {
                                 $details[] = $label . ' → ' . $fmt_rep($to);
-                            }
-                        } elseif ($field === 'client_id') {
-                            $fmt_client = function($v) use ($client_manager) {
-                                if (empty($v)) {
-                                    return __('aucun', 'portail-entreprises');
-                                }
-                                $c = $client_manager->get_client((int) $v);
-                                return $c ? $c->name : '#' . $v;
-                            };
-                            if ($is_diff && $from !== '') {
-                                $details[] = $label . ' : ' . $fmt_client($from) . ' → ' . $fmt_client($to);
-                            } else {
-                                $details[] = $label . ' → ' . $fmt_client($to);
                             }
                         } else {
                             if ($is_diff && (string) $from !== '') {

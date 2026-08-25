@@ -42,7 +42,6 @@ class PE_Installer {
         // Table companies
         $sql_companies = "CREATE TABLE IF NOT EXISTS {$prefix}companies (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            client_id BIGINT UNSIGNED DEFAULT NULL,
             name VARCHAR(255) NOT NULL,
             customer_code VARCHAR(50) NOT NULL DEFAULT '',
             siret VARCHAR(14) NOT NULL DEFAULT '',
@@ -75,34 +74,6 @@ class PE_Installer {
             PRIMARY KEY (id),
             KEY status (status),
             KEY assigned_rep_id (assigned_rep_id),
-            KEY customer_code (customer_code),
-            KEY client_id (client_id)
-        ) ENGINE=InnoDB {$charset_collate};";
-
-        // Table clients — identité client, indépendante des sociétés (un client peut
-        // exister avant même d'avoir une société créée).
-        $sql_clients = "CREATE TABLE IF NOT EXISTS {$prefix}clients (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            customer_code VARCHAR(50) NOT NULL DEFAULT '',
-            name VARCHAR(255) NOT NULL,
-            billing_address LONGTEXT NULL,
-            shipping_address LONGTEXT NULL,
-            phone VARCHAR(30) NOT NULL DEFAULT '',
-            fax VARCHAR(30) NOT NULL DEFAULT '',
-            contact_function VARCHAR(100) NOT NULL DEFAULT '',
-            contact_first_name VARCHAR(100) NOT NULL DEFAULT '',
-            contact_last_name VARCHAR(100) NOT NULL DEFAULT '',
-            discount_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-            credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-            payment_terms INT UNSIGNED NOT NULL DEFAULT 30,
-            payment_method_code VARCHAR(50) NOT NULL DEFAULT '',
-            payment_method_label VARCHAR(255) NOT NULL DEFAULT '',
-            category VARCHAR(100) NOT NULL DEFAULT '',
-            activity VARCHAR(255) NOT NULL DEFAULT '',
-            comments TEXT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
             KEY customer_code (customer_code)
         ) ENGINE=InnoDB {$charset_collate};";
 
@@ -242,7 +213,6 @@ class PE_Installer {
 
         $tables = [
             $sql_companies,
-            $sql_clients,
             $sql_agencies,
             $sql_user_company,
             $sql_cost_centers,
@@ -305,14 +275,6 @@ class PE_Installer {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN category VARCHAR(100) NOT NULL DEFAULT '' AFTER payment_method_label");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN activity VARCHAR(255) NOT NULL DEFAULT '' AFTER category");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN comments TEXT NULL AFTER activity");
-        }
-
-        // Migrate: add client_id column if missing (v1.7.0) — rattachement d'une société
-        // à une fiche client indépendante (le client peut exister sans société).
-        $col_client_id = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'client_id'");
-        if (!$col_client_id) {
-            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN client_id BIGINT UNSIGNED DEFAULT NULL AFTER id");
-            $wpdb->query("ALTER TABLE {$prefix}companies ADD KEY client_id (client_id)");
         }
 
         self::update_db_version();

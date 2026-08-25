@@ -3,7 +3,7 @@
  * Plugin Name: Portail Entreprises B2B
  * Plugin URI:  https://b-mesure.fr
  * Description: Portail B2B complet pour WooCommerce : gestion des entreprises, utilisateurs, budgets, workflow d'approbation et audit.
- * Version:     1.7.0
+ * Version:     1.6.0
  * Author:      B MESURE
  * Author URI:  https://b-mesure.fr
  * Text Domain: portail-entreprises
@@ -17,10 +17,10 @@
 defined('ABSPATH') || exit;
 
 // Constants
-define('PE_VERSION', '1.7.0');
+define('PE_VERSION', '1.6.0');
 define('PE_PATH', plugin_dir_path(__FILE__));
 define('PE_URL', plugin_dir_url(__FILE__));
-define('PE_DB_VERSION', '1.7.0');
+define('PE_DB_VERSION', '1.6.0');
 
 // Declare WooCommerce HPOS compatibility
 add_action('before_woocommerce_init', function () {
@@ -69,7 +69,6 @@ add_action('plugins_loaded', function () {
     require_once PE_PATH . 'includes/class-permissions.php';
     require_once PE_PATH . 'includes/modules/audit/class-audit-log.php';
     require_once PE_PATH . 'includes/modules/companies/class-company-manager.php';
-    require_once PE_PATH . 'includes/modules/companies/class-client-manager.php';
     require_once PE_PATH . 'includes/modules/users/class-user-manager.php';
     require_once PE_PATH . 'includes/modules/budgets/class-budget-manager.php';
     require_once PE_PATH . 'includes/modules/approval/class-approval-manager.php';
