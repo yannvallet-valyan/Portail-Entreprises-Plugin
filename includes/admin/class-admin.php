@@ -22,12 +22,16 @@ class PE_Admin {
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
         add_action('wp_ajax_pe_admin_search_users', [$this, 'ajax_admin_search_users']);
-        add_action('wp_ajax_pe_admin_search_companies', [$this, 'ajax_admin_search_companies']);
-        add_action('wp_ajax_pe_admin_get_company_prefill', [$this, 'ajax_admin_get_company_prefill']);
+        add_action('wp_ajax_pe_admin_search_clients', [$this, 'ajax_admin_search_clients']);
+        add_action('wp_ajax_pe_admin_get_client_prefill', [$this, 'ajax_admin_get_client_prefill']);
+        add_action('wp_ajax_pe_admin_quick_create_client', [$this, 'ajax_admin_quick_create_client']);
+        add_action('wp_ajax_pe_admin_delete_client', [$this, 'ajax_admin_delete_client']);
         add_action('wp_ajax_pe_admin_invite_user_to_company', [$this, 'ajax_admin_invite_user_to_company']);
         add_action('admin_post_pe_save_approval_rule', [$this, 'handle_save_approval_rule']);
         add_action('admin_post_pe_create_company', [$this, 'handle_post_create_company']);
         add_action('admin_post_pe_update_company', [$this, 'handle_post_update_company']);
+        add_action('admin_post_pe_create_client', [$this, 'handle_post_create_client']);
+        add_action('admin_post_pe_update_client', [$this, 'handle_post_update_client']);
     }
 
     public static function get_instance(): self {
@@ -59,6 +63,15 @@ class PE_Admin {
 
         add_submenu_page(
             'portail-b2b',
+            __('Clients', 'portail-entreprises'),
+            __('Clients', 'portail-entreprises'),
+            'manage_woocommerce',
+            'portail-b2b-clients',
+            [$this, 'render_clients_page']
+        );
+
+        add_submenu_page(
+            'portail-b2b',
             __('Paramètres', 'portail-entreprises'),
             __('Paramètres', 'portail-entreprises'),
             'manage_woocommerce',
@@ -77,7 +90,7 @@ class PE_Admin {
     }
 
     public function enqueue_admin_assets(string $hook): void {
-        $b2b_pages = ['toplevel_page_portail-b2b', 'portail-b2b_page_portail-b2b-settings', 'portail-b2b_page_portail-b2b-magic-links'];
+        $b2b_pages = ['toplevel_page_portail-b2b', 'portail-b2b_page_portail-b2b-settings', 'portail-b2b_page_portail-b2b-magic-links', 'portail-b2b_page_portail-b2b-clients'];
 
         if (!in_array($hook, $b2b_pages, true) && 'user-edit.php' !== $hook && 'profile.php' !== $hook) {
             return;
@@ -128,6 +141,23 @@ class PE_Admin {
         }
     }
 
+    public function render_clients_page(): void {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        $action    = isset($_GET['action']) ? sanitize_key($_GET['action']) : 'list';
+        $client_id = isset($_GET['client_id']) ? absint($_GET['client_id']) : 0;
+
+        if ('edit' === $action && $client_id > 0) {
+            include PE_PATH . 'admin/views/client-edit.php';
+        } elseif ('new' === $action) {
+            include PE_PATH . 'admin/views/client-edit.php';
+        } else {
+            include PE_PATH . 'admin/views/clients.php';
+        }
+    }
+
     /**
      * Traitement POST création société — déclenché via admin_post_ avant envoi des headers.
      */
@@ -140,6 +170,7 @@ class PE_Admin {
 
         $data = [
             'name'                  => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'client_id'             => absint($_POST['client_id'] ?? 0),
             'customer_code'         => sanitize_text_field(wp_unslash($_POST['customer_code'] ?? '')),
             'siret'                 => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
             'vat_number'            => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
@@ -208,6 +239,7 @@ class PE_Admin {
 
         $data = [
             'name'                  => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'client_id'             => absint($_POST['client_id'] ?? 0),
             'customer_code'         => sanitize_text_field(wp_unslash($_POST['customer_code'] ?? '')),
             'siret'                 => sanitize_text_field(wp_unslash($_POST['siret'] ?? '')),
             'vat_number'            => sanitize_text_field(wp_unslash($_POST['vat_number'] ?? '')),
@@ -767,9 +799,10 @@ class PE_Admin {
     }
 
     /**
-     * Recherche de sociétés existantes (rattachement d'une nouvelle entité à un client connu).
+     * Recherche de clients existants — qu'ils aient déjà une société ou non —
+     * pour rattacher une société (nouvelle ou existante) à un client connu.
      */
-    public function ajax_admin_search_companies(): void {
+    public function ajax_admin_search_clients(): void {
         check_ajax_referer('pe_b2b_ajax', 'nonce');
 
         if (!current_user_can('manage_woocommerce')) {
@@ -779,62 +812,209 @@ class PE_Admin {
         $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
 
         if (strlen($search) < 2) {
-            wp_send_json_success(['companies' => []]);
+            wp_send_json_success(['clients' => []]);
         }
 
-        $companies = PE_Company_Manager::get_instance()->search_companies_for_autofill($search, 10);
+        $clients = PE_Client_Manager::get_instance()->search_clients($search, 10);
 
         $results = array_map(function ($c) {
             $label = $c->name;
             if ($c->customer_code) {
                 $label .= ' (' . $c->customer_code . ')';
             }
-            if ($c->siret) {
-                $label .= ' — ' . $c->siret;
-            }
             return [
                 'id'    => (int) $c->id,
                 'label' => $label,
             ];
-        }, $companies);
+        }, $clients);
 
-        wp_send_json_success(['companies' => array_values($results)]);
+        wp_send_json_success(['clients' => array_values($results)]);
     }
 
     /**
-     * Renvoie les coordonnées d'une société existante afin de pré-remplir la fiche
-     * d'une nouvelle entité rattachée au même client (adresses, contact, règlement…).
+     * Renvoie les coordonnées d'un client existant afin de pré-remplir la fiche
+     * d'une société rattachée au même client (adresses, contact, règlement…).
      */
-    public function ajax_admin_get_company_prefill(): void {
+    public function ajax_admin_get_client_prefill(): void {
         check_ajax_referer('pe_b2b_ajax', 'nonce');
 
         if (!current_user_can('manage_woocommerce')) {
             wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
         }
 
-        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
-        $company    = $company_id ? PE_Company_Manager::get_instance()->get_company($company_id) : null;
+        $client_id = isset($_POST['client_id']) ? absint($_POST['client_id']) : 0;
+        $client    = $client_id ? PE_Client_Manager::get_instance()->get_client($client_id) : null;
 
-        if (!$company) {
-            wp_send_json_error(['message' => __('Société introuvable.', 'portail-entreprises')]);
+        if (!$client) {
+            wp_send_json_error(['message' => __('Client introuvable.', 'portail-entreprises')]);
         }
 
         wp_send_json_success([
-            'billing_address'      => (object) (array) json_decode($company->billing_address ?? '', true),
-            'shipping_address'     => (object) (array) json_decode($company->shipping_address ?? '', true),
-            'phone'                => $company->phone,
-            'fax'                  => $company->fax,
-            'contact_function'     => $company->contact_function,
-            'contact_first_name'   => $company->contact_first_name,
-            'contact_last_name'    => $company->contact_last_name,
-            'payment_terms'        => $company->payment_terms,
-            'payment_method_code'  => $company->payment_method_code,
-            'payment_method_label' => $company->payment_method_label,
-            'discount_rate'        => $company->discount_rate,
-            'credit_limit'         => $company->credit_limit,
-            'category'             => $company->category,
-            'activity'             => $company->activity,
+            'client_id'             => (int) $client->id,
+            'customer_code'         => $client->customer_code,
+            'billing_address'       => (object) (array) json_decode($client->billing_address ?? '', true),
+            'shipping_address'      => (object) (array) json_decode($client->shipping_address ?? '', true),
+            'phone'                 => $client->phone,
+            'fax'                   => $client->fax,
+            'contact_function'      => $client->contact_function,
+            'contact_first_name'    => $client->contact_first_name,
+            'contact_last_name'     => $client->contact_last_name,
+            'payment_terms'         => $client->payment_terms,
+            'payment_method_code'   => $client->payment_method_code,
+            'payment_method_label'  => $client->payment_method_label,
+            'discount_rate'         => $client->discount_rate,
+            'credit_limit'          => $client->credit_limit,
+            'category'              => $client->category,
+            'activity'              => $client->activity,
         ]);
+    }
+
+    /**
+     * Crée un client minimal (code + libellé) à la volée depuis le champ de recherche
+     * lorsqu'aucun client existant ne correspond, afin de le rattacher immédiatement
+     * à la société en cours de création.
+     */
+    public function ajax_admin_quick_create_client(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $name = isset($_POST['name']) ? sanitize_text_field(wp_unslash($_POST['name'])) : '';
+
+        if (!$name) {
+            wp_send_json_error(['message' => __('Le libellé du client est requis.', 'portail-entreprises')]);
+        }
+
+        $data = [
+            'name'          => $name,
+            'customer_code' => isset($_POST['customer_code']) ? sanitize_text_field(wp_unslash($_POST['customer_code'])) : '',
+        ];
+
+        $result = PE_Client_Manager::get_instance()->create_client($data);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        wp_send_json_success([
+            'id'    => $result,
+            'label' => $name,
+        ]);
+    }
+
+    public function ajax_admin_delete_client(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $client_id = isset($_POST['client_id']) ? absint($_POST['client_id']) : 0;
+
+        if (!$client_id) {
+            wp_send_json_error(['message' => __('Client invalide.', 'portail-entreprises')]);
+        }
+
+        $result = PE_Client_Manager::get_instance()->delete_client($client_id);
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        wp_send_json_success([
+            'message'  => __('Client supprimé avec succès.', 'portail-entreprises'),
+            'redirect' => admin_url('admin.php?page=portail-b2b-clients'),
+        ]);
+    }
+
+    /**
+     * Traitement POST création client — déclenché via admin_post_ avant envoi des headers.
+     */
+    public function handle_post_create_client(): void {
+        check_admin_referer('pe_create_client', '_wpnonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        $data = $this->collect_client_post_data();
+
+        $result = PE_Client_Manager::get_instance()->create_client($data);
+
+        if (is_wp_error($result)) {
+            $error_msg = urlencode($result->get_error_message());
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b-clients&action=new&pe_error=' . $error_msg));
+        } else {
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b-clients&action=edit&client_id=' . $result . '&pe_notice=created'));
+        }
+        exit;
+    }
+
+    /**
+     * Traitement POST mise à jour client — déclenché via admin_post_ avant envoi des headers.
+     */
+    public function handle_post_update_client(): void {
+        $client_id = isset($_POST['client_id']) ? absint($_POST['client_id']) : 0;
+
+        if (!$client_id) {
+            wp_die(esc_html__('ID de client invalide.', 'portail-entreprises'));
+        }
+
+        check_admin_referer('pe_save_client_' . $client_id, '_wpnonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Accès refusé.', 'portail-entreprises'));
+        }
+
+        $data = $this->collect_client_post_data();
+
+        $result = PE_Client_Manager::get_instance()->update_client($client_id, $data);
+
+        if ($result) {
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b-clients&action=edit&client_id=' . $client_id . '&pe_notice=updated'));
+        } else {
+            wp_safe_redirect(admin_url('admin.php?page=portail-b2b-clients&action=edit&client_id=' . $client_id . '&pe_error=' . urlencode(__('Erreur lors de la mise à jour.', 'portail-entreprises'))));
+        }
+        exit;
+    }
+
+    /**
+     * Rassemble et assainit les champs POST communs création/mise à jour d'un client.
+     */
+    private function collect_client_post_data(): array {
+        return [
+            'name'                  => sanitize_text_field(wp_unslash($_POST['client_name'] ?? '')),
+            'customer_code'         => sanitize_text_field(wp_unslash($_POST['customer_code'] ?? '')),
+            'phone'                 => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'fax'                   => sanitize_text_field(wp_unslash($_POST['fax'] ?? '')),
+            'contact_function'      => sanitize_text_field(wp_unslash($_POST['contact_function'] ?? '')),
+            'contact_first_name'    => sanitize_text_field(wp_unslash($_POST['contact_first_name'] ?? '')),
+            'contact_last_name'     => sanitize_text_field(wp_unslash($_POST['contact_last_name'] ?? '')),
+            'payment_method_code'   => sanitize_text_field(wp_unslash($_POST['payment_method_code'] ?? '')),
+            'payment_method_label'  => sanitize_text_field(wp_unslash($_POST['payment_method_label'] ?? '')),
+            'category'              => sanitize_text_field(wp_unslash($_POST['category'] ?? '')),
+            'activity'              => sanitize_text_field(wp_unslash($_POST['activity'] ?? '')),
+            'comments'              => sanitize_textarea_field(wp_unslash($_POST['comments'] ?? '')),
+            'discount_rate'         => (float) ($_POST['discount_rate'] ?? 0),
+            'credit_limit'          => (float) ($_POST['credit_limit'] ?? 0),
+            'payment_terms'         => (int) ($_POST['payment_terms'] ?? 30),
+            'billing_address' => [
+                'address_1' => sanitize_text_field(wp_unslash($_POST['billing_address_1'] ?? '')),
+                'address_2' => sanitize_text_field(wp_unslash($_POST['billing_address_2'] ?? '')),
+                'city'      => sanitize_text_field(wp_unslash($_POST['billing_city'] ?? '')),
+                'postcode'  => sanitize_text_field(wp_unslash($_POST['billing_postcode'] ?? '')),
+                'country'   => sanitize_text_field(wp_unslash($_POST['billing_country'] ?? '')),
+            ],
+            'shipping_address' => [
+                'address_1' => sanitize_text_field(wp_unslash($_POST['shipping_address_1'] ?? '')),
+                'address_2' => sanitize_text_field(wp_unslash($_POST['shipping_address_2'] ?? '')),
+                'city'      => sanitize_text_field(wp_unslash($_POST['shipping_city'] ?? '')),
+                'postcode'  => sanitize_text_field(wp_unslash($_POST['shipping_postcode'] ?? '')),
+                'country'   => sanitize_text_field(wp_unslash($_POST['shipping_country'] ?? '')),
+            ],
+        ];
     }
 
     public function ajax_admin_invite_user_to_company(): void {

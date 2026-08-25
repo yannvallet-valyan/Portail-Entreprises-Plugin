@@ -63,6 +63,12 @@ class PE_Company_Manager {
             $formats[]                       = '%d';
         }
 
+        // client_id : rattachement optionnel à une fiche client existante.
+        if (!empty($data['client_id'])) {
+            $insert_data['client_id'] = (int) $data['client_id'];
+            $formats[]                = '%d';
+        }
+
         // tdw_profile_slug : profil de remise TDW optionnel.
         if (array_key_exists('tdw_profile_slug', $data)) {
             $insert_data['tdw_profile_slug'] = !empty($data['tdw_profile_slug']) ? sanitize_key((string) $data['tdw_profile_slug']) : null;
@@ -144,6 +150,10 @@ class PE_Company_Manager {
         if (isset($data['name'])) {
             $update_data['name'] = sanitize_text_field($data['name']);
             $update_format[]     = '%s';
+        }
+        if (array_key_exists('client_id', $data)) {
+            $update_data['client_id'] = !empty($data['client_id']) ? (int) $data['client_id'] : null;
+            $update_format[]          = '%d';
         }
         if (isset($data['customer_code'])) {
             $update_data['customer_code'] = sanitize_text_field($data['customer_code']);
@@ -717,20 +727,22 @@ class PE_Company_Manager {
         $params = [];
 
         if ($status && in_array($status, ['active', 'suspended'], true)) {
-            $where[]  = 'status = %s';
+            $where[]  = 'c.status = %s';
             $params[] = $status;
         }
 
         if ($search) {
-            $where[]  = '(name LIKE %s OR siret LIKE %s OR customer_code LIKE %s)';
+            $where[]  = '(c.name LIKE %s OR c.siret LIKE %s OR c.customer_code LIKE %s)';
             $like     = '%' . $wpdb->esc_like($search) . '%';
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
         }
 
-        $sql = "SELECT c.*, (SELECT COUNT(*) FROM {$wpdb->prefix}b2b_user_company uc WHERE uc.company_id = c.id) as user_count
-                FROM {$wpdb->prefix}b2b_companies c";
+        $sql = "SELECT c.*, cl.name as client_name,
+                       (SELECT COUNT(*) FROM {$wpdb->prefix}b2b_user_company uc WHERE uc.company_id = c.id) as user_count
+                FROM {$wpdb->prefix}b2b_companies c
+                LEFT JOIN {$wpdb->prefix}b2b_clients cl ON cl.id = c.client_id";
 
         if (!empty($where)) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -922,30 +934,6 @@ class PE_Company_Manager {
         do_action( 'pe_company_deleted', $company_id );
 
         return true;
-    }
-
-    /**
-     * Recherche des sociétés existantes pour la pré-saisie d'une nouvelle fiche client
-     * (rattachement d'une nouvelle entité à un client déjà connu).
-     */
-    public function search_companies_for_autofill(string $search, int $limit = 10): array {
-        global $wpdb;
-
-        $like = '%' . $wpdb->esc_like($search) . '%';
-
-        return $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, name, customer_code, siret
-                 FROM {$wpdb->prefix}b2b_companies
-                 WHERE name LIKE %s OR customer_code LIKE %s OR siret LIKE %s
-                 ORDER BY name ASC
-                 LIMIT %d",
-                $like,
-                $like,
-                $like,
-                $limit
-            )
-        ) ?: [];
     }
 
     /**
