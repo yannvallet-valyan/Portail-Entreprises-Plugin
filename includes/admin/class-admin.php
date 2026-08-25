@@ -787,6 +787,7 @@ class PE_Admin {
         $billing_address  = ['address_1' => '', 'address_2' => '', 'city' => '', 'postcode' => '', 'country' => ''];
         $shipping_address = $billing_address;
         $phone            = '';
+        $company_name     = '';
 
         if (class_exists('WC_Customer')) {
             $customer = new \WC_Customer($user_id);
@@ -805,13 +806,15 @@ class PE_Admin {
                 'postcode'  => $customer->get_shipping_postcode(),
                 'country'   => $customer->get_shipping_country(),
             ];
-            $phone = $customer->get_billing_phone();
+            $phone        = $customer->get_billing_phone();
+            $company_name = $customer->get_billing_company();
         }
 
         wp_send_json_success([
             'first_name'       => $user->first_name,
             'last_name'        => $user->last_name,
             'phone'            => $phone,
+            'company_name'     => $company_name,
             'billing_address'  => $billing_address,
             'shipping_address' => $shipping_address,
         ]);

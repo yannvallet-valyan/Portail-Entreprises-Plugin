@@ -149,7 +149,7 @@ $all_roles = PE_Permissions::get_roles();
                     <div id="pe-contact-search-results"
                          style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; max-height:220px; overflow-y:auto; z-index:200; box-shadow:0 2px 6px rgba(0,0,0,.15);"></div>
                     <p class="description" style="margin:4px 0 0;">
-                        <?php esc_html_e('Sélectionnez un client existant pour remplir automatiquement son nom et, s\'il les a déjà renseignées, ses adresses de facturation et de livraison.', 'portail-entreprises'); ?>
+                        <?php esc_html_e('Sélectionnez un client existant pour remplir automatiquement les informations déjà connues : nom, société, téléphone, adresses de facturation et de livraison.', 'portail-entreprises'); ?>
                     </p>
                     <p id="pe-contact-search-msg" style="margin-top:6px; font-weight:600;"></p>
                 </div>
@@ -208,6 +208,8 @@ $all_roles = PE_Permissions::get_roles();
                                                     var d = res2.data;
                                                     setIfPresent('contact_first_name', d.first_name);
                                                     setIfPresent('contact_last_name', d.last_name);
+                                                    setIfPresent('company_name', d.company_name);
+                                                    setIfPresent('phone', d.phone);
                                                     setIfPresent('billing_address_1', d.billing_address.address_1);
                                                     setIfPresent('billing_address_2', d.billing_address.address_2);
                                                     setIfPresent('billing_city', d.billing_address.city);
@@ -219,7 +221,7 @@ $all_roles = PE_Permissions::get_roles();
                                                     setIfPresent('shipping_postcode', d.shipping_address.postcode);
                                                     setIfPresent('shipping_country', d.shipping_address.country);
                                                     $('#pe-contact-search-msg').css('color', '#28a745')
-                                                        .text('<?php echo esc_js(__('Contact et adresses pré-remplis. Vérifiez avant d\'enregistrer.', 'portail-entreprises')); ?>');
+                                                        .text('<?php echo esc_js(__('Informations disponibles pré-remplies (nom, société, téléphone, adresses…). Vérifiez avant d\'enregistrer.', 'portail-entreprises')); ?>');
                                                 } else {
                                                     $('#pe-contact-search-msg').css('color', '#b32d2e').text(res2.data.message);
                                                 }
