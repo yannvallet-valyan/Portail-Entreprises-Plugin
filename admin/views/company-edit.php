@@ -513,7 +513,22 @@ $all_roles = PE_Permissions::get_roles();
 
     <!-- Utilisateurs de la société -->
     <div class="pe-form-card" style="margin-top:20px;">
-        <h2><?php esc_html_e('Utilisateurs', 'portail-entreprises'); ?></h2>
+        <h2 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <?php esc_html_e('Utilisateurs', 'portail-entreprises'); ?>
+            <?php if (!empty($company_users)) : ?>
+            <button type="button" class="button pe-bulk-block-orders"
+                    data-company-id="<?php echo esc_attr($company_id); ?>"
+                    data-nonce="<?php echo esc_attr(wp_create_nonce('pe_b2b_ajax')); ?>"
+                    style="font-weight:normal; font-size:13px;">
+                <?php esc_html_e('Bloquer les commandes de tous les membres', 'portail-entreprises'); ?>
+            </button>
+            <?php endif; ?>
+        </h2>
+        <?php if (!empty($company_users)) : ?>
+        <p class="description" style="margin-top:-8px;">
+            <?php esc_html_e('Passe tous les membres (hors administrateurs de société) en rôle « Devis uniquement » : ils pourront toujours créer un devis, mais plus passer commande.', 'portail-entreprises'); ?>
+        </p>
+        <?php endif; ?>
         <?php if (empty($company_users)) : ?>
             <p><?php esc_html_e('Aucun utilisateur associé.', 'portail-entreprises'); ?></p>
         <?php else : ?>

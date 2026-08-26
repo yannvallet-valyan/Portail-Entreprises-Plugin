@@ -16,6 +16,7 @@
         init: function () {
             this.bindApprovalActions();
             this.bindRemoveUserActions();
+            this.bindBulkBlockOrders();
             this.bindCostCenterActions();
             this.bindAdminActions();
             this.bindEditMetaActions();
@@ -52,6 +53,49 @@
             $link.append(
                 ' <span class="pe-menu-badge">' + count + '</span>'
             );
+        },
+
+        /**
+         * Bloque les commandes de tous les membres d'une société en un clic
+         * (bascule tout le monde, hors company_admin, en rôle "Devis uniquement").
+         */
+        bindBulkBlockOrders: function () {
+            var self = this;
+
+            $(document).on('click', '.pe-bulk-block-orders', function () {
+                var $btn      = $(this);
+                var companyId = $btn.data('company-id');
+                var nonce     = $btn.data('nonce');
+
+                if (!window.confirm(peB2B.i18n.confirmBulkBlockOrders || peB2B.i18n.confirmDelete)) {
+                    return;
+                }
+
+                self.setButtonLoading($btn);
+
+                $.ajax({
+                    url:    peB2B.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action:     'pe_admin_bulk_block_company_orders',
+                        nonce:      nonce,
+                        company_id: companyId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            window.alert(response.data.message);
+                            window.location.reload();
+                        } else {
+                            window.alert(response.data.message || peB2B.i18n.error);
+                            self.resetButton($btn);
+                        }
+                    },
+                    error: function () {
+                        window.alert(peB2B.i18n.error);
+                        self.resetButton($btn);
+                    }
+                });
+            });
         },
 
         /**

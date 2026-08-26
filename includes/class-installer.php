@@ -94,7 +94,7 @@ class PE_Installer {
             user_id BIGINT UNSIGNED NOT NULL,
             company_id BIGINT UNSIGNED NOT NULL,
             agency_id BIGINT UNSIGNED DEFAULT NULL,
-            role ENUM('company_admin','purchase_manager','buyer','requester','accountant') NOT NULL DEFAULT 'buyer',
+            role ENUM('company_admin','purchase_manager','buyer','requester','quote_only','accountant') NOT NULL DEFAULT 'buyer',
             budget_monthly DECIMAL(12,2) DEFAULT NULL,
             budget_annual DECIMAL(12,2) DEFAULT NULL,
             budget_per_order DECIMAL(12,2) DEFAULT NULL,
@@ -275,6 +275,12 @@ class PE_Installer {
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN category VARCHAR(100) NOT NULL DEFAULT '' AFTER payment_method_label");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN activity VARCHAR(255) NOT NULL DEFAULT '' AFTER category");
             $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN comments TEXT NULL AFTER activity");
+        }
+
+        // Migrate: add 'quote_only' to the role ENUM if missing (v1.6.1)
+        $col_role = $wpdb->get_row("SHOW COLUMNS FROM {$prefix}user_company LIKE 'role'");
+        if ($col_role && false === strpos($col_role->Type, 'quote_only')) {
+            $wpdb->query("ALTER TABLE {$prefix}user_company MODIFY COLUMN role ENUM('company_admin','purchase_manager','buyer','requester','quote_only','accountant') NOT NULL DEFAULT 'buyer'");
         }
 
         self::update_db_version();

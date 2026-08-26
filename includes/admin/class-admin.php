@@ -18,6 +18,7 @@ class PE_Admin {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_pe_admin_add_user_to_company', [$this, 'ajax_admin_add_user_to_company']);
         add_action('wp_ajax_pe_admin_remove_user_from_company', [$this, 'ajax_admin_remove_user_from_company']);
+        add_action('wp_ajax_pe_admin_bulk_block_company_orders', [$this, 'ajax_admin_bulk_block_company_orders']);
         add_action('wp_ajax_pe_admin_create_cost_center', [$this, 'ajax_admin_create_cost_center']);
         add_action('wp_ajax_pe_admin_delete_approval_rule', [$this, 'ajax_admin_delete_approval_rule']);
         add_action('wp_ajax_pe_admin_delete_company', [$this, 'ajax_admin_delete_company']);
@@ -106,6 +107,7 @@ class PE_Admin {
                 'confirmDeleteCompanyFinal' => __('ATTENTION : cette action est irréversible. Toutes les données associées (utilisateurs, budgets, agences, approbations) seront supprimées. Confirmer définitivement ?', 'portail-entreprises'),
                 'processing'                => __('Traitement en cours...', 'portail-entreprises'),
                 'error'                     => __('Une erreur est survenue.', 'portail-entreprises'),
+                'confirmBulkBlockOrders'    => __('Passer tous les membres de cette société (hors administrateurs) en rôle « Devis uniquement » ? Ils ne pourront plus passer commande.', 'portail-entreprises'),
             ],
         ]);
     }
@@ -624,6 +626,59 @@ class PE_Admin {
         } else {
             wp_send_json_error(['message' => __('Erreur lors de la suppression.', 'portail-entreprises')]);
         }
+    }
+
+    /**
+     * Passe tous les membres d'une société en rôle "quote_only" (Devis uniquement),
+     * à l'exception des company_admin (pour ne pas couper l'accès de gestion).
+     * Ne touche qu'à la colonne role : les budgets individuels sont conservés.
+     */
+    public function ajax_admin_bulk_block_company_orders(): void {
+        check_ajax_referer('pe_b2b_ajax', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Accès refusé.', 'portail-entreprises')]);
+        }
+
+        $company_id = isset($_POST['company_id']) ? absint($_POST['company_id']) : 0;
+
+        if (!$company_id) {
+            wp_send_json_error(['message' => __('Paramètres invalides.', 'portail-entreprises')]);
+        }
+
+        $members  = PE_Company_Manager::get_instance()->get_company_users($company_id);
+        $user_mgr = PE_User_Manager::get_instance();
+
+        $updated       = 0;
+        $skipped_admin = 0;
+
+        foreach ($members as $member) {
+            if ('company_admin' === $member->role) {
+                $skipped_admin++;
+                continue;
+            }
+            if ($user_mgr->update_user_budget((int) $member->user_id, $company_id, ['role' => 'quote_only'])) {
+                $updated++;
+            }
+        }
+
+        PE_Audit_Log::get_instance()->log(
+            get_current_user_id(),
+            $company_id,
+            'bulk_block_company_orders',
+            'company',
+            $company_id,
+            ['updated' => $updated, 'skipped_admin' => $skipped_admin]
+        );
+
+        wp_send_json_success([
+            'message' => sprintf(
+                /* translators: 1: number of members switched to quote_only, 2: number of company admins left untouched */
+                __('%1$d utilisateur(s) passé(s) en « Devis uniquement ». %2$d administrateur(s) de société conservé(s) sans changement.', 'portail-entreprises'),
+                $updated,
+                $skipped_admin
+            ),
+        ]);
     }
 
     public function ajax_admin_create_cost_center(): void {
