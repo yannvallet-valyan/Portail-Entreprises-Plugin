@@ -54,7 +54,7 @@ defined('ABSPATH') || exit;
                         <?php endforeach; ?>
                     </select>
                     <p class="description">
-                        <?php esc_html_e('company_admin : toutes les permissions | purchase_manager : approbation + commandes | buyer : commandes dans budget | requester : panier uniquement | accountant : lecture seule', 'portail-entreprises'); ?>
+                        <?php esc_html_e('company_admin : toutes les permissions | purchase_manager : approbation + commandes | buyer : commandes dans budget | requester : panier + demande d\'approbation | quote_only : panier + devis, commande bloquée | accountant : lecture seule', 'portail-entreprises'); ?>
                     </p>
                 </td>
             </tr>

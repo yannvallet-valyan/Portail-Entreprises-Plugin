@@ -34,6 +34,9 @@ class PE_Permissions {
         ],
         'requester' => [
             'create_cart',
+        ],
+        'quote_only' => [
+            'create_cart',
             'create_quotes',
         ],
         'accountant' => [
@@ -158,6 +161,7 @@ class PE_Permissions {
             'purchase_manager' => __('Responsable achats', 'portail-entreprises'),
             'buyer'            => __('Acheteur', 'portail-entreprises'),
             'requester'        => __('Demandeur', 'portail-entreprises'),
+            'quote_only'       => __('Devis uniquement', 'portail-entreprises'),
             'accountant'       => __('Comptable', 'portail-entreprises'),
         ];
     }

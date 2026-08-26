@@ -68,10 +68,17 @@ class PE_Budget_Manager {
             return $this->get_native_block_reason($user_id);
         }
 
-        // Rôle "Demandeur" : ne peut jamais commander directement.
+        // Rôle "Demandeur" : ne peut jamais commander directement, doit passer
+        // par une demande d'approbation à un supérieur.
         $role = PE_Permissions::get_user_b2b_role($user_id);
         if ('requester' === $role) {
             return __('En tant que Demandeur, vous ne pouvez pas passer commande directement. Soumettez votre panier pour validation.', 'portail-entreprises');
+        }
+
+        // Rôle "Devis uniquement" : blocage simple, sans workflow d'approbation
+        // (le compte n'a pas la capacité place_orders et n'en aura jamais).
+        if (!PE_Permissions::user_can($user_id, 'place_orders')) {
+            return __('Votre compte ne permet pas de passer commande directement. Transformez votre panier en devis.', 'portail-entreprises');
         }
 
         // Vérification du budget si le panier est chargé.
@@ -102,7 +109,7 @@ class PE_Budget_Manager {
             return true;
         }
 
-        return __('Votre compte ne permet pas de passer commande directement. Soumettez votre panier pour validation ou transformez-le en devis.', 'portail-entreprises');
+        return __('Votre compte ne permet pas de passer commande directement. Transformez votre panier en devis.', 'portail-entreprises');
     }
 
     /**
@@ -140,13 +147,18 @@ class PE_Budget_Manager {
     /**
      * Renvoie le HTML du bouton de demande d'approbation (avec form/nonce).
      *
-     * Réservé aux utilisateurs B2B : le workflow d'approbation suppose une
-     * entreprise/hiérarchie. Un compte natif restreint via wc-quote (sans
-     * portail B2B) voit uniquement le message de blocage, sans ce bouton.
+     * Réservé aux utilisateurs B2B qui ont un chemin d'escalade vers un
+     * supérieur (rôle "Demandeur", ou tout rôle bloqué par dépassement de
+     * budget). Un compte natif restreint via wc-quote (sans portail B2B) ou
+     * le rôle "Devis uniquement" — bloqué sans workflow d'approbation — ne
+     * voient que le message de blocage, sans ce bouton.
      */
     private function get_approval_button_for_render(string $context): string {
         $user_id = get_current_user_id();
         if (!$user_id || !PE_Permissions::is_b2b_user($user_id) || !class_exists('PE_Approval_Manager')) {
+            return '';
+        }
+        if ('quote_only' === PE_Permissions::get_user_b2b_role($user_id)) {
             return '';
         }
         return PE_Approval_Manager::get_instance()->get_approval_button_html($context);
