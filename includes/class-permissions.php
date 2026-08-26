@@ -34,6 +34,7 @@ class PE_Permissions {
         ],
         'requester' => [
             'create_cart',
+            'create_quotes',
         ],
         'accountant' => [
             'view_orders',

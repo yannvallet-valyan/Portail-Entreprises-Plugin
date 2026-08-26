@@ -33,6 +33,12 @@ class PE_Budget_Manager {
         // Blocage serveur du mini-panier / panier flottant WoodMart : remplace les boutons natifs.
         add_action('woocommerce_widget_shopping_cart_buttons', [$this, 'maybe_block_minicart_button'], 1);
 
+        // Le portail B2B reste prioritaire sur la case « Interdire la commande directe »
+        // exposée par wc-quote sur la fiche utilisateur WordPress : un compte rattaché
+        // à une entreprise est piloté uniquement par son rôle B2B (ex. "Demandeur"),
+        // la case native est alors grisée côté wc-quote.
+        add_filter('wcq_user_orders_restriction_managed_externally', [$this, 'filter_wcq_managed_externally'], 10, 2);
+
         // Cron mensuel de remise à zéro
         add_action('pe_reset_monthly_budgets', [$this, 'reset_monthly_usage']);
 
@@ -51,8 +57,15 @@ class PE_Budget_Manager {
     public function get_checkout_block_reason(): true|string {
         $user_id = get_current_user_id();
 
-        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
+        if (!$user_id) {
             return true;
+        }
+
+        // Comptes hors portail B2B : la restriction est pilotée nativement par
+        // wc-quote (case « Interdire la commande directe » sur la fiche
+        // utilisateur WordPress), applicable à n'importe quel client WooCommerce.
+        if (!PE_Permissions::is_b2b_user($user_id)) {
+            return $this->get_native_block_reason($user_id);
         }
 
         // Rôle "Demandeur" : ne peut jamais commander directement.
@@ -74,6 +87,31 @@ class PE_Budget_Manager {
         }
 
         return true;
+    }
+
+    /**
+     * Raison de blocage pour un compte WooCommerce natif (hors portail B2B),
+     * pilotée par le plugin wc-quote (case « Interdire la commande directe »
+     * sur la fiche utilisateur). Le portail B2B reste prioritaire : cette
+     * méthode n'est jamais consultée pour un utilisateur B2B (cf. ci-dessus).
+     *
+     * @return true|string
+     */
+    private function get_native_block_reason(int $user_id): true|string {
+        if (!class_exists('WCQ_Order_Restriction') || WCQ_Order_Restriction::can_place_orders($user_id)) {
+            return true;
+        }
+
+        return __('Votre compte ne permet pas de passer commande directement. Soumettez votre panier pour validation ou transformez-le en devis.', 'portail-entreprises');
+    }
+
+    /**
+     * Indique à wc-quote qu'un utilisateur B2B rattaché à une entreprise ne
+     * peut pas modifier sa case native « Interdire la commande directe » :
+     * seul son rôle B2B (ex. "Demandeur") décide.
+     */
+    public function filter_wcq_managed_externally(bool $managed, int $user_id): bool {
+        return PE_Permissions::is_b2b_user((int) $user_id) ? true : $managed;
     }
 
     /**
@@ -101,9 +139,14 @@ class PE_Budget_Manager {
 
     /**
      * Renvoie le HTML du bouton de demande d'approbation (avec form/nonce).
+     *
+     * Réservé aux utilisateurs B2B : le workflow d'approbation suppose une
+     * entreprise/hiérarchie. Un compte natif restreint via wc-quote (sans
+     * portail B2B) voit uniquement le message de blocage, sans ce bouton.
      */
     private function get_approval_button_for_render(string $context): string {
-        if (!class_exists('PE_Approval_Manager')) {
+        $user_id = get_current_user_id();
+        if (!$user_id || !PE_Permissions::is_b2b_user($user_id) || !class_exists('PE_Approval_Manager')) {
             return '';
         }
         return PE_Approval_Manager::get_instance()->get_approval_button_html($context);
@@ -367,17 +410,13 @@ class PE_Budget_Manager {
      * Valide le budget au checkout WooCommerce.
      */
     public function validate_budget_at_checkout(): void {
-        $user_id = get_current_user_id();
+        // Réutilise get_checkout_block_reason() : couvre à la fois le budget,
+        // le rôle "Demandeur" et la restriction native wc-quote, là où seul le
+        // budget était auparavant revérifié côté serveur à la soumission.
+        $reason = $this->get_checkout_block_reason();
 
-        if (!$user_id || !PE_Permissions::is_b2b_user($user_id)) {
-            return;
-        }
-
-        $total  = (float) WC()->cart->get_total('raw');
-        $result = $this->check_budget($user_id, $total);
-
-        if (is_wp_error($result)) {
-            wc_add_notice($result->get_error_message(), 'error');
+        if (true !== $reason) {
+            wc_add_notice($reason, 'error');
         }
     }
 
