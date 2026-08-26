@@ -92,6 +92,14 @@ class PE_Core {
         add_filter('wp_mail_from_name', [$this, 'filter_mail_from_name']);
         add_action('phpmailer_init', [$this, 'align_mail_return_path']);
 
+        // Devis (wc-quotes-woodmart) : les conditions de règlement configurées sur
+        // la société du client (page « Modifier la société ») priment sur la valeur
+        // par défaut du client / la valeur globale. Priorité 20 = exécuté après le
+        // filtre du plugin wc-quotes-deadline-manager (priorité 10), afin de
+        // pouvoir écraser sa valeur quand la société a une configuration propre.
+        add_filter('wcq_payment_terms', [$this, 'filter_wcq_payment_terms'], 20, 2);
+        add_filter('wcq_payment_days', [$this, 'filter_wcq_payment_days'], 20, 2);
+
         // Initialisation des modules
         PE_Budget_Manager::get_instance()->init();
         PE_Approval_Manager::get_instance()->init();
@@ -162,6 +170,48 @@ class PE_Core {
         if (is_object($phpmailer) && !empty($phpmailer->From)) {
             $phpmailer->Sender = $phpmailer->From;
         }
+    }
+
+    /**
+     * Filtre wcq_payment_terms (wc-quotes-woodmart) : si le client appartient à
+     * une société dont le « Libellé règlement » est renseigné, ce libellé prime
+     * sur la valeur par défaut (client / globale) pour l'affichage des devis.
+     *
+     * @param string $terms       Conditions de règlement déterminées en amont.
+     * @param int    $customer_id ID de l'utilisateur client du devis.
+     */
+    public function filter_wcq_payment_terms(string $terms, int $customer_id = 0): string {
+        if ($customer_id <= 0) {
+            return $terms;
+        }
+
+        $company = PE_Permissions::get_user_company($customer_id);
+        if ($company && !empty($company->payment_method_label)) {
+            return $company->payment_method_label;
+        }
+
+        return $terms;
+    }
+
+    /**
+     * Filtre wcq_payment_days (wc-quotes-woodmart) : si le client appartient à
+     * une société avec un délai de paiement configuré, ce délai prime sur la
+     * valeur par défaut (client / globale) pour le calcul de la date d'échéance.
+     *
+     * @param int $days        Nombre de jours déterminé en amont.
+     * @param int $customer_id ID de l'utilisateur client du devis.
+     */
+    public function filter_wcq_payment_days(int $days, int $customer_id = 0): int {
+        if ($customer_id <= 0) {
+            return $days;
+        }
+
+        $company = PE_Permissions::get_user_company($customer_id);
+        if ($company && isset($company->payment_terms) && (int) $company->payment_terms > 0) {
+            return (int) $company->payment_terms;
+        }
+
+        return $days;
     }
 
     /**
