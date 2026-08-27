@@ -229,6 +229,10 @@ class PE_Company_Manager {
             $update_data['status'] = $data['status'];
             $update_format[]       = '%s';
         }
+        if (isset($data['orders_blocked'])) {
+            $update_data['orders_blocked'] = (int) (bool) $data['orders_blocked'];
+            $update_format[]               = '%d';
+        }
         if (isset($data['modules_enabled'])) {
             $update_data['modules_enabled'] = wp_json_encode($data['modules_enabled']);
             $update_format[]                = '%s';

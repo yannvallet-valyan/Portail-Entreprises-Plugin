@@ -68,6 +68,14 @@ class PE_Budget_Manager {
             return $this->get_native_block_reason($user_id);
         }
 
+        // Société entièrement bloquée (case « Bloquer les commandes » sur la
+        // fiche société) : prioritaire sur le rôle individuel, y compris pour
+        // un company_admin — réversible en un clic depuis la fiche société.
+        $company = PE_Permissions::get_user_company($user_id);
+        if ($company && (int) ($company->orders_blocked ?? 0) === 1) {
+            return __('Les commandes sont temporairement bloquées pour votre société. Transformez votre panier en devis.', 'portail-entreprises');
+        }
+
         // Rôle "Demandeur" : ne peut jamais commander directement, doit passer
         // par une demande d'approbation à un supérieur.
         $role = PE_Permissions::get_user_b2b_role($user_id);
@@ -149,9 +157,10 @@ class PE_Budget_Manager {
      *
      * Réservé aux utilisateurs B2B qui ont un chemin d'escalade vers un
      * supérieur (rôle "Demandeur", ou tout rôle bloqué par dépassement de
-     * budget). Un compte natif restreint via wc-quote (sans portail B2B) ou
-     * le rôle "Devis uniquement" — bloqué sans workflow d'approbation — ne
-     * voient que le message de blocage, sans ce bouton.
+     * budget). Un compte natif restreint via wc-quote (sans portail B2B), le
+     * rôle "Devis uniquement", ou une société entièrement bloquée — bloqués
+     * sans workflow d'approbation — ne voient que le message de blocage,
+     * sans ce bouton.
      */
     private function get_approval_button_for_render(string $context): string {
         $user_id = get_current_user_id();
@@ -159,6 +168,10 @@ class PE_Budget_Manager {
             return '';
         }
         if ('quote_only' === PE_Permissions::get_user_b2b_role($user_id)) {
+            return '';
+        }
+        $company = PE_Permissions::get_user_company($user_id);
+        if ($company && (int) ($company->orders_blocked ?? 0) === 1) {
             return '';
         }
         return PE_Approval_Manager::get_instance()->get_approval_button_html($context);

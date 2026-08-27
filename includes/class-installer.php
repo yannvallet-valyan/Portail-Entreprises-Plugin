@@ -68,6 +68,7 @@ class PE_Installer {
             budget_monthly DECIMAL(12,2) DEFAULT NULL,
             budget_annual DECIMAL(12,2) DEFAULT NULL,
             budget_block_enabled TINYINT(1) NOT NULL DEFAULT 1,
+            orders_blocked TINYINT(1) NOT NULL DEFAULT 0,
             tdw_profile_slug VARCHAR(100) DEFAULT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -281,6 +282,12 @@ class PE_Installer {
         $col_role = $wpdb->get_row("SHOW COLUMNS FROM {$prefix}user_company LIKE 'role'");
         if ($col_role && false === strpos($col_role->Type, 'quote_only')) {
             $wpdb->query("ALTER TABLE {$prefix}user_company MODIFY COLUMN role ENUM('company_admin','purchase_manager','buyer','requester','quote_only','accountant') NOT NULL DEFAULT 'buyer'");
+        }
+
+        // Migrate: add orders_blocked column if missing (v1.6.2)
+        $col_orders_blocked = $wpdb->get_var("SHOW COLUMNS FROM {$prefix}companies LIKE 'orders_blocked'");
+        if (!$col_orders_blocked) {
+            $wpdb->query("ALTER TABLE {$prefix}companies ADD COLUMN orders_blocked TINYINT(1) NOT NULL DEFAULT 0");
         }
 
         self::update_db_version();
